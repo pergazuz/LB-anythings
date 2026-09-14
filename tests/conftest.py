@@ -4,6 +4,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -57,3 +58,12 @@ def fakes() -> Fakes:
 def client(settings: Settings, fakes: Fakes) -> Iterator[TestClient]:
     with TestClient(build_app(settings, ports=fakes.ports)) as c:
         yield c
+
+
+@pytest.fixture
+def png() -> bytes:
+    """A 40x30 PNG. Needs the ML dependency group's decoder, so tests using it skip without."""
+    cv2 = pytest.importorskip("cv2", reason="decoding needs the ML dependency group")
+    ok, encoded = cv2.imencode(".png", np.zeros((30, 40, 3), dtype=np.uint8))
+    assert ok
+    return bytes(encoded)

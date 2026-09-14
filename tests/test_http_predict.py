@@ -5,6 +5,7 @@ import logging
 import pytest
 from fastapi.testclient import TestClient
 
+from lb_anythings.application.project_context import Credentials
 from lb_anythings.bootstrap.container import build_app
 from lb_anythings.bootstrap.settings import Settings
 from lb_anythings.domain.checkpoint import Checkpoint
@@ -177,3 +178,14 @@ def test_startup_without_a_checkpoint_says_so(
         pass
 
     assert "no Checkpoint found" in caplog.text
+
+
+def test_the_setup_credentials_travel_with_every_image_request(
+    client: TestClient, fakes: Fakes
+) -> None:
+    fakes.serve()
+    client.post("/setup", json={"schema": PIPE, "hostname": "http://ls:8080", "access_token": "t"})
+
+    client.post("/predict", json={"tasks": [{"id": 1, "data": {"image": "/data/upload/1/a.jpg"}}]})
+
+    assert fakes.media.requests == [("/data/upload/1/a.jpg", Credentials("http://ls:8080", "t"))]

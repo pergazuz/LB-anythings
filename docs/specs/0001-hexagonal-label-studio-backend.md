@@ -433,10 +433,13 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   the URL's host matches the Label Studio URL.
 - A reference beginning with `/data/` (uploads and local-files) is prefixed with the
   Label Studio hostname from setup, else from settings, and fetched with the token.
-  With no hostname available the resolution fails with a reason.
+  Setup's credentials win as a pair: the configured token is sent to a hostname setup
+  named only when it is the configured host. With no hostname available the
+  resolution fails with a reason.
 - A reference that is an existing local path is read directly.
-- Fetched bytes are cached under the data directory keyed by a hash of the
-  reference, then decoded with OpenCV. Decoding failure is `MediaUnavailable`.
+- Fetched bytes are cached under the data directory keyed by a hash of the resolved
+  URL, so the same Label Studio path on a different hostname is fetched again; then
+  decoded with OpenCV. Decoding failure is `MediaUnavailable`.
 
 ### Detector lifecycle (YOLO adapter and detector cache)
 

@@ -14,7 +14,7 @@ from lb_anythings.application.ports import (
     DetectorFactory,
     TaskMediaResolver,
 )
-from lb_anythings.application.project_context import ProjectContextHolder
+from lb_anythings.application.project_context import Credentials, ProjectContextHolder
 from lb_anythings.application.use_cases.predict_tasks import PredictTasks
 from lb_anythings.application.use_cases.report_status import ReportStatus
 from lb_anythings.application.use_cases.setup_project import SetupProject
@@ -36,7 +36,17 @@ def production_ports(settings: Settings) -> Ports:
             settings.trained_checkpoint, settings.checkpoint
         ),
         detector_factory=YoloDetectorFactory(conf=settings.conf, imgsz=settings.imgsz),
-        media=LabelStudioMediaResolver(),
+        media=LabelStudioMediaResolver(
+            cache_dir=settings.data_dir / "cache",
+            defaults=Credentials(
+                hostname=settings.label_studio_url,
+                access_token=(
+                    settings.label_studio_api_key.get_secret_value()
+                    if settings.label_studio_api_key
+                    else None
+                ),
+            ),
+        ),
     )
 
 
