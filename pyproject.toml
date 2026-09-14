@@ -59,7 +59,7 @@ explicit = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "gpu: needs a real Checkpoint and a GPU; runs only when LB_TEST_CHECKPOINT is set",
+    "gpu: needs a real Checkpoint, a real frame and a GPU; runs only when LB_TEST_CHECKPOINT and LB_TEST_IMAGE are set",
 ]
 
 [tool.ruff]
@@ -76,8 +76,13 @@ files = ["src", "tests"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["cv2", "cv2.*", "ultralytics", "ultralytics.*"]
+module = ["cv2", "cv2.*"]
 ignore_missing_imports = true
+
+# ultralytics ships types but re-exports lazily; we treat it as untyped rather than chase it.
+[[tool.mypy.overrides]]
+module = ["ultralytics", "ultralytics.*"]
+follow_imports = "skip"
 
 # --- The dependency rule, enforced. Runs in CI and as a pytest test. ---
 [tool.importlinter]
@@ -120,4 +125,7 @@ type = "independence"
 modules = [
     "lb_anythings.adapters.inbound.http",
     "lb_anythings.adapters.inbound.cli",
+    "lb_anythings.adapters.outbound.yolo",
+    "lb_anythings.adapters.outbound.filesystem",
+    "lb_anythings.adapters.outbound.labelstudio",
 ]

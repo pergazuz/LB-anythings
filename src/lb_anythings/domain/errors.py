@@ -3,3 +3,7 @@
 
 class InvalidLabelConfig(ValueError):
     """The label config does not describe exactly one RectangleLabels on one Image."""
+
+
+class MediaUnavailable(RuntimeError):
+    """A Task's image could not be fetched or decoded."""

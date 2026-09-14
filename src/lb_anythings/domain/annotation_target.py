@@ -16,6 +16,16 @@ class AnnotationTarget:
     image_field: str
     labels: tuple[str, ...]
 
+    def label_for(self, detected: str) -> str:
+        """Map a Detector's own class name onto the project's labels.
+
+        An exact match is kept; anything else lands on the project's first label, so a
+        single-class Detector always yields the project's label whatever it calls its class.
+        """
+        if detected in self.labels or not self.labels:
+            return detected
+        return self.labels[0]
+
 
 def parse_label_config(xml: str | None) -> AnnotationTarget:
     if not xml or not xml.strip():

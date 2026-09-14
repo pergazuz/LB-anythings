@@ -294,9 +294,9 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   alive; succeeded once a Checkpoint newer than its start time exists in the run's
   output; failed if the process is gone and no such Checkpoint exists.
 - Checkpoint: a path and a modified time; its version string is its file name. The
-  latest Checkpoint is the newest by modified time among the trainer's output for
-  the configured run name, falling back to the explicitly configured Checkpoint,
-  falling back to none.
+  latest Checkpoint is the newer, by modified time, of the trainer's output for the
+  configured run name and the explicitly configured Checkpoint (ties go to the
+  trained one), else none. An Operator who drops in a fresher file is served it.
 - Hard Frame scoring, a pure function over a frame's Detections: for each Detection
   whose score lies in the uncertainty band `[lo, hi)`, add 1, plus 2 if its area is
   under 2% of the frame, or plus 1 if under 5%. Selection: sort frames by score
