@@ -3,6 +3,7 @@
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -54,9 +55,17 @@ class Fakes:
 
 
 @pytest.fixture
-def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
+def settings_overrides() -> dict[str, Any]:
+    """Override in a test module to build the app with other settings."""
+    return {}
+
+
+@pytest.fixture
+def settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, settings_overrides: dict[str, Any]
+) -> Settings:
     monkeypatch.chdir(tmp_path)  # an empty working directory: no `.env` can leak in
-    return Settings(data_dir=tmp_path / "data")
+    return Settings(data_dir=tmp_path / "data", **settings_overrides)
 
 
 @pytest.fixture

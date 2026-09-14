@@ -6,27 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.annotations import RECTANGLE
+from tests.annotations import annotation_event as event
 from tests.conftest import Fakes
 from tests.label_configs import PIPE, VEHICLES
 
 NO_CONTROL = "<View><Image name='image'/></View>"
-
-
-def event(
-    action: str = "ANNOTATION_CREATED",
-    *,
-    task_id: int = 7,
-    image: str = "a.jpg",
-    image_field: str = "image",
-    result: list[dict[str, Any]] | None = None,
-    **annotation_fields: Any,
-) -> dict[str, Any]:
-    return {
-        "action": action,
-        "task": {"id": task_id, "data": {image_field: image}},
-        "annotation": {"result": [RECTANGLE] if result is None else result, **annotation_fields},
-        "project": {"id": 1},
-    }
 
 
 def _with_labels(labels: list[str] | None) -> dict[str, Any]:

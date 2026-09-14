@@ -32,6 +32,7 @@ from lb_anythings.application.use_cases.predict_tasks import PredictTasks
 from lb_anythings.application.use_cases.report_status import ReportStatus
 from lb_anythings.application.use_cases.setup_project import SetupProject
 from lb_anythings.bootstrap.settings import Settings
+from lb_anythings.domain.retraining import RetrainPolicy
 
 
 @dataclass(frozen=True)
@@ -104,7 +105,13 @@ def build_app(settings: Settings, ports: Ports | None = None) -> FastAPI:
         report_status=ReportStatus(detector_cache, ports.trainer),
         setup_project=setup_project,
         predict_tasks=PredictTasks(setup_project, detector_cache, ports.media),
-        ingest_annotation=IngestAnnotation(setup_project, ports.media, ports.examples),
+        ingest_annotation=IngestAnnotation(
+            setup_project,
+            ports.media,
+            ports.examples,
+            ports.trainer,
+            RetrainPolicy(threshold=settings.retrain_every, minimum=settings.min_examples),
+        ),
         # Load (or note the absence of) the Checkpoint at startup, not on the first request.
         on_startup=lambda: detector_cache.current(),
     )

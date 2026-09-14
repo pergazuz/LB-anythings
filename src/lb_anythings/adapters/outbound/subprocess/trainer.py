@@ -11,6 +11,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Sequence
@@ -54,8 +55,13 @@ class SubprocessTrainer:
         self._log = runs_dir / f"{run_name}.log"
         self._checkpoint = checkpoint
         self._process: subprocess.Popen[bytes] | None = None
+        self._start_lock = threading.Lock()
 
     def start(self) -> TrainingRun:
+        with self._start_lock:  # two callers crossing a threshold together launch one run
+            return self._start()
+
+    def _start(self) -> TrainingRun:
         if self.active() is not None:
             raise TrainingAlreadyActive("a Training Run is already active; wait for it to finish")
         self._record_file.parent.mkdir(parents=True, exist_ok=True)

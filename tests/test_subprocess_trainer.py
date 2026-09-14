@@ -94,3 +94,21 @@ def test_the_process_output_lands_in_the_run_log(tmp_path: Path) -> None:
 
     assert _wait_until(lambda: trainer.active() is None)
     assert "hello from training" in (tmp_path / "runs/active.log").read_text()
+
+
+def test_two_callers_crossing_the_threshold_together_launch_one_run(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    trainer = _trainer(tmp_path, KEEPS_RUNNING)
+
+    def attempt() -> str:
+        try:
+            trainer.start()
+            return "started"
+        except TrainingAlreadyActive:
+            return "refused"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = sorted(pool.map(lambda _: attempt(), range(2)))
+
+    assert outcomes == ["refused", "started"]
