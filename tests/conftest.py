@@ -14,6 +14,7 @@ from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
 from tests.fakes import (
     FakeMediaResolver,
+    FakeTrainer,
     InMemoryCheckpointRepository,
     InMemoryExampleStore,
     ScriptedDetectorFactory,
@@ -32,6 +33,7 @@ class Fakes:
     detectors: ScriptedDetectorFactory
     media: FakeMediaResolver
     examples: InMemoryExampleStore
+    trainer: FakeTrainer
 
     def serve(self, detections: Sequence[Detection] = ()) -> None:
         """A Checkpoint whose Detector scripts `detections`, and an image at `a.jpg`."""
@@ -47,6 +49,7 @@ class Fakes:
             media=self.media,
             examples=self.examples,
             background=SynchronousBackgroundRunner(),
+            trainer=self.trainer,
         )
 
 
@@ -63,6 +66,7 @@ def fakes() -> Fakes:
         ScriptedDetectorFactory(),
         FakeMediaResolver(),
         InMemoryExampleStore(),
+        FakeTrainer(),
     )
 
 

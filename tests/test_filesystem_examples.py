@@ -12,12 +12,23 @@ from tests.fakes import image
 
 PIPE_BOX = GroundTruthBox(Box(0.1, 0.1, 0.6, 0.6), "pipe")
 CAR_BOX = GroundTruthBox(Box(0.0, 0.0, 0.5, 0.25), "car")
+ONE_BOX = "0 0.500000 0.500000 0.100000 0.100000"
 
 
 @pytest.fixture
 def store(tmp_path: Path) -> FilesystemExampleStore:
     pytest.importorskip("cv2", reason="saving encodes JPEG with the ML dependency group")
     return FilesystemExampleStore(tmp_path / "examples")
+
+
+def _legacy_layout(root: Path, labels: dict[str, str], classes: str | None = "pipe\n") -> None:
+    (root / "images").mkdir(parents=True)
+    (root / "labels").mkdir()
+    for stem, text in labels.items():
+        (root / "images" / f"{stem}.jpg").write_bytes(b"jpeg bytes")
+        (root / "labels" / f"{stem}.txt").write_text(text)
+    if classes is not None:
+        (root / "classes.txt").write_text(classes)
 
 
 def test_saving_writes_the_image_the_yolo_lines_and_the_classes_file(
@@ -69,17 +80,13 @@ def test_an_empty_store_has_nothing(tmp_path: Path) -> None:
 
     assert store.positive_count() == 0
     assert list(store.all()) == []
+    assert store.training_files() == []
+    assert store.class_names() == []
 
 
 def test_the_previous_backends_layout_is_read_without_conversion(tmp_path: Path) -> None:
     root = tmp_path / "examples"
-    (root / "images").mkdir(parents=True)
-    (root / "labels").mkdir()
-    (root / "images/task10.jpg").write_bytes(b"jpeg bytes")
-    (root / "labels/task10.txt").write_text("0 0.350000 0.350000 0.500000 0.500000")  # no newline
-    (root / "images/task11.jpg").write_bytes(b"jpeg bytes")
-    (root / "labels/task11.txt").write_text("")
-    (root / "classes.txt").write_text("pipe\n")
+    _legacy_layout(root, {"task10": "0 0.350000 0.350000 0.500000 0.500000", "task11": ""})
     store = FilesystemExampleStore(root)
 
     assert store.positive_count() == 1
@@ -87,3 +94,19 @@ def test_the_previous_backends_layout_is_read_without_conversion(tmp_path: Path)
     assert examples["10"].boxes[0].label == "pipe"
     assert examples["10"].boxes[0].box.coordinates() == pytest.approx((0.1, 0.1, 0.6, 0.6))
     assert examples["11"].boxes == ()
+
+
+def test_the_store_hands_the_trainer_its_positive_files_and_class_names(tmp_path: Path) -> None:
+    root = tmp_path / "examples"
+    _legacy_layout(root, {"task1": ONE_BOX + "\n", "task2": "", "task3": ONE_BOX}, "pipe\ncar\n")
+    (root / "labels/task4.txt").write_text(ONE_BOX)  # positive, but its image is gone
+    store = FilesystemExampleStore(root)
+
+    files = store.training_files()
+
+    assert [(task_id, image.name, label.name) for task_id, image, label in files] == [
+        ("1", "task1.jpg", "task1.txt"),
+        ("3", "task3.jpg", "task3.txt"),
+    ]
+    assert store.class_names() == ["pipe", "car"]
+    assert store.positive_count() == 2

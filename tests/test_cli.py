@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from lb_anythings.adapters.outbound.yolo.training import TrainingLayout, TrainingReport
 from lb_anythings.bootstrap.main import main
+from lb_anythings.bootstrap.settings import Settings
+from lb_anythings.domain.errors import NotEnoughExamples
 
 
 class FakeServer:
@@ -47,3 +50,33 @@ def test_startup_never_logs_the_api_key(
 
     assert caplog.records, "startup should log its effective settings"
     assert "secret-token" not in caplog.text
+
+
+def test_train_reports_the_split_and_the_checkpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def training(settings: Settings) -> TrainingReport:
+        layout = TrainingLayout(tmp_path / "dataset", tmp_path / "dataset/data.yaml", 17, 3)
+        return TrainingReport(layout, tmp_path / "runs/active/weights/best.pt")
+
+    code = main(["train"], train=training)
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "17 train / 3 val" in out and "best.pt" in out
+
+
+def test_train_exits_non_zero_when_the_training_set_is_too_small(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def refusing(settings: Settings) -> TrainingReport:
+        raise NotEnoughExamples("3 positive Examples; need at least 4 to train")
+
+    code = main(["train"], train=refusing)
+
+    assert code == 1
+    assert "need at least 4" in capsys.readouterr().err

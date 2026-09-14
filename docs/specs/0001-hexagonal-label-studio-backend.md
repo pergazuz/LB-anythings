@@ -294,7 +294,9 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   success the Checkpoint it produced. Status rule: running while its process is
   alive; succeeded once a Checkpoint newer than its start time exists in the run's
   output; failed if the process is gone and no such Checkpoint exists.
-- Checkpoint: a path and a modified time; its version string is its file name. The
+- Checkpoint: a path and a modified time; its version string is its file name plus its
+  modification time, so every Training Run's output is a distinct version to Label Studio
+  and a reload is visible in `model_version`. The
   latest Checkpoint is the newer, by modified time, of the trainer's output for the
   configured run name and the explicitly configured Checkpoint (ties go to the
   trained one), else none. An Operator who drops in a fresher file is served it.

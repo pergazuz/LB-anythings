@@ -56,11 +56,25 @@ class FilesystemExampleStore:
             _write_atomically(self._labels / f"{stem}.txt", label_text.encode(ENCODING))
 
     def positive_count(self) -> int:
+        return len(self.training_files())
+
+    def training_files(self) -> list[tuple[str, Path, Path]]:
+        """(task id, image file, label file) for every positive Example with its image present.
+
+        The trainer copies these into its own layout; only this adapter reads the store's.
+        """
         if not self._labels.is_dir():
-            return 0
-        return sum(
-            1 for path in self._labels.glob("*.txt") if path.read_text(encoding=ENCODING).strip()
-        )
+            return []
+        files = []
+        for label in sorted(self._labels.glob("*.txt")):
+            image = self._images / f"{label.stem}.jpg"
+            if label.read_text(encoding=ENCODING).strip() and image.is_file():
+                files.append((label.stem.removeprefix(STEM_PREFIX), image, label))
+        return files
+
+    def class_names(self) -> list[str]:
+        """Label names by class index, as the classes file records them."""
+        return self._read_classes()
 
     def all(self) -> Sequence[Example]:
         if not self._labels.is_dir():

@@ -129,4 +129,5 @@ modules = [
     "lb_anythings.adapters.outbound.filesystem",
     "lb_anythings.adapters.outbound.labelstudio",
     "lb_anythings.adapters.outbound.background",
+    "lb_anythings.adapters.outbound.subprocess",
 ]

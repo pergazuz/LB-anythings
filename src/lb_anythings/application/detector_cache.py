@@ -46,12 +46,24 @@ class DetectorCache:
     def current(self, *, force_reload: bool = False) -> Detector:
         """The Detector for the latest Checkpoint, reloading under a lock when it changed.
 
-        Callers already inside detect() keep the Detector they were handed.
+        Callers already inside detect() keep the Detector they were handed. A Checkpoint that
+        cannot be loaded (a Training Run may be mid-write) leaves the serving Detector in
+        place and is tried again next time.
         """
         latest = self._checkpoints.latest()
         with self._lock:
             if force_reload or not self._ever_loaded or self._changed(latest):
-                self._detector = self._factory.load(latest) if latest else NullDetector()
+                try:
+                    detector = self._factory.load(latest) if latest else NullDetector()
+                except Exception:
+                    logger.warning(
+                        "could not load Checkpoint %s; keeping %s and retrying later",
+                        latest.path if latest else None,
+                        self._detector.version,
+                        exc_info=True,
+                    )
+                    return self._detector
+                self._detector = detector
                 self._loaded = latest
                 self._ever_loaded = True
                 if latest is None:

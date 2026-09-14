@@ -28,7 +28,7 @@ def test_the_configured_checkpoint_serves_when_nothing_was_trained(tmp_path: Pat
     assert checkpoint is not None
     assert (checkpoint.path, checkpoint.version, checkpoint.modified_at) == (
         configured,
-        "custom.pt",
+        "custom.pt@19700101T001640Z",
         1_000,
     )
 

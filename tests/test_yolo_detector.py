@@ -31,7 +31,7 @@ def test_the_checkpoint_detects_its_class_on_a_real_frame() -> None:
 
     detections = detector.detect(Image(cv2.imread(IMAGE)))
 
-    assert detector.version == path.name
+    assert detector.version.startswith(path.name + "@")
     assert detections, "expected at least one Detection on the reference frame"
     assert all(d.label for d in detections), "labels come from the Checkpoint's class names"
     assert all(0.25 <= d.score <= 1.0 for d in detections)

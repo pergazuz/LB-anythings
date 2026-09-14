@@ -1,5 +1,6 @@
 """Composition root: wires settings and adapters into the application."""
 
+import sys
 from dataclasses import dataclass
 
 from fastapi import FastAPI
@@ -9,7 +10,13 @@ from lb_anythings.adapters.outbound.background.runner import ThreadBackgroundRun
 from lb_anythings.adapters.outbound.filesystem.checkpoints import FilesystemCheckpointRepository
 from lb_anythings.adapters.outbound.filesystem.examples import FilesystemExampleStore
 from lb_anythings.adapters.outbound.labelstudio.media import LabelStudioMediaResolver
+from lb_anythings.adapters.outbound.subprocess.trainer import SubprocessTrainer
 from lb_anythings.adapters.outbound.yolo.detector import YoloDetectorFactory
+from lb_anythings.adapters.outbound.yolo.training import (
+    TrainingConfig,
+    TrainingReport,
+    run_training,
+)
 from lb_anythings.application.detector_cache import DetectorCache
 from lb_anythings.application.ports import (
     BackgroundRunner,
@@ -17,6 +24,7 @@ from lb_anythings.application.ports import (
     DetectorFactory,
     ExampleStore,
     TaskMediaResolver,
+    Trainer,
 )
 from lb_anythings.application.project_context import Credentials, ProjectContextHolder
 from lb_anythings.application.use_cases.ingest_annotation import IngestAnnotation
@@ -35,27 +43,54 @@ class Ports:
     media: TaskMediaResolver
     examples: ExampleStore
     background: BackgroundRunner
+    trainer: Trainer
 
 
 def production_ports(settings: Settings) -> Ports:
+    api_key = settings.label_studio_api_key
     return Ports(
         checkpoints=FilesystemCheckpointRepository(
             settings.trained_checkpoint, settings.checkpoint
         ),
         detector_factory=YoloDetectorFactory(conf=settings.conf, imgsz=settings.imgsz),
         media=LabelStudioMediaResolver(
-            cache_dir=settings.data_dir / "cache",
+            cache_dir=settings.cache_dir,
             defaults=Credentials(
                 hostname=settings.label_studio_url,
-                access_token=(
-                    settings.label_studio_api_key.get_secret_value()
-                    if settings.label_studio_api_key
-                    else None
-                ),
+                access_token=api_key.get_secret_value() if api_key else None,
             ),
         ),
-        examples=FilesystemExampleStore(settings.data_dir / "examples"),
+        examples=FilesystemExampleStore(settings.examples_dir),
         background=ThreadBackgroundRunner(),
+        trainer=SubprocessTrainer(
+            # The same interpreter and environment, so the child reads the same settings.
+            command=[sys.executable, "-m", "lb_anythings", "train"],
+            runs_dir=settings.runs_dir,
+            run_name=settings.train_run_name,
+            checkpoint=settings.trained_checkpoint,
+        ),
+    )
+
+
+def train_with_yolo(settings: Settings) -> TrainingReport:
+    """One Training Run in this process: what `lb-anythings train` does."""
+    store = FilesystemExampleStore(settings.examples_dir)
+    return run_training(
+        examples=store.training_files(),
+        class_names=store.class_names(),
+        layout_root=settings.dataset_dir,
+        runs_root=settings.runs_dir,
+        config=TrainingConfig(
+            base_model=settings.train_base_model,
+            epochs=settings.train_epochs,
+            patience=settings.train_patience,
+            imgsz=settings.imgsz,
+            batch=settings.train_batch,
+            device=settings.device,
+            lr0=settings.train_lr0,
+            run_name=settings.train_run_name,
+            min_examples=settings.min_examples,
+        ),
     )
 
 
@@ -66,7 +101,7 @@ def build_app(settings: Settings, ports: Ports | None = None) -> FastAPI:
     setup_project = SetupProject(context_holder)
     return create_app(
         background=ports.background,
-        report_status=ReportStatus(detector_cache),
+        report_status=ReportStatus(detector_cache, ports.trainer),
         setup_project=setup_project,
         predict_tasks=PredictTasks(setup_project, detector_cache, ports.media),
         ingest_annotation=IngestAnnotation(setup_project, ports.media, ports.examples),

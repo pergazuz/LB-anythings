@@ -7,3 +7,11 @@ class InvalidLabelConfig(ValueError):
 
 class MediaUnavailable(RuntimeError):
     """A Task's image could not be fetched or decoded."""
+
+
+class TrainingAlreadyActive(RuntimeError):
+    """A Training Run is running; a second one would fight it for the GPU and the Checkpoint."""
+
+
+class NotEnoughExamples(ValueError):
+    """The Training Set is too small to split into training and validation."""

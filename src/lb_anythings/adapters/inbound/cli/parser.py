@@ -14,6 +14,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default=None, help="bind address (default: LB_HOST)")
     serve.add_argument("--port", type=int, default=None, help="port (default: LB_PORT)")
 
+    commands.add_parser(
+        "train",
+        help="run one Training Run on the Training Set in this process (the server spawns this)",
+    )
+
     return parser
 
 

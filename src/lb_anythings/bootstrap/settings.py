@@ -6,6 +6,8 @@ from pathlib import Path
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from lb_anythings.adapters.outbound.yolo.training import checkpoint_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,16 @@ class Settings(BaseSettings):
     )
     conf: float = 0.25
     imgsz: int = 1024
+
+    # Training Runs
     train_run_name: str = "active"
+    min_examples: int = 4
+    train_base_model: str = "yolo11s.pt"
+    train_epochs: int = 100
+    train_patience: int = 30
+    train_batch: int = 8
+    train_lr0: float | None = None
+    device: str = "0"
 
     # Label Studio's own names, unprefixed. HOSTNAME is the previous backend's name for URL.
     label_studio_url: str | None = Field(
@@ -33,10 +44,27 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("LABEL_STUDIO_API_KEY")
     )
 
+    # --- the data directory layout ---
+    @property
+    def examples_dir(self) -> Path:
+        return self.data_dir / "examples"
+
+    @property
+    def runs_dir(self) -> Path:
+        return self.data_dir / "runs"
+
+    @property
+    def dataset_dir(self) -> Path:
+        return self.data_dir / "dataset"
+
+    @property
+    def cache_dir(self) -> Path:
+        return self.data_dir / "cache"
+
     @property
     def trained_checkpoint(self) -> Path:
-        """Where a Training Run writes its Checkpoint (ultralytics' own layout under the run)."""
-        return self.data_dir / "runs" / self.train_run_name / "weights" / "best.pt"
+        """Where a Training Run writes its Checkpoint, and where the Detector looks first."""
+        return checkpoint_path(self.runs_dir, self.train_run_name)
 
 
 def render_effective_settings(settings: Settings) -> str:

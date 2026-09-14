@@ -11,6 +11,7 @@ from lb_anythings.application.project_context import Credentials
 from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
 from lb_anythings.domain.example import Example
+from lb_anythings.domain.training_run import TrainingRun
 
 
 @dataclass(frozen=True)
@@ -63,3 +64,17 @@ class BackgroundRunner(Protocol):
     """Runs a job after the HTTP response has gone out. A thread in production."""
 
     def run(self, job: Callable[[], object]) -> None: ...
+
+
+class Trainer(Protocol):
+    """Runs Training Runs. At most one is active at a time."""
+
+    def start(self) -> TrainingRun:
+        """Launch a Training Run, or raise TrainingAlreadyActive."""
+        ...
+
+    def active(self) -> TrainingRun | None:
+        """The running Training Run with its current status, or None."""
+        ...
+
+    def refresh(self, run: TrainingRun) -> TrainingRun: ...
