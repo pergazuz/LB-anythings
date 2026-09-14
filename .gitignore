@@ -1,0 +1,19 @@
+# environments
+.venv/
+.env
+__pycache__/
+*.py[cod]
+
+# tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# build
+dist/
+build/
+*.egg-info/
+
+# runtime data: Examples, Training Runs, Checkpoints, caches, mined frames
+data/
+*.pt

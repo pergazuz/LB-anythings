@@ -1,0 +1,27 @@
+"""Request shapes as Label Studio sends them. Tolerant of extra fields: payloads vary by version."""
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SetupRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    schema_: str | None = Field(default=None, alias="schema")
+    label_config: str | None = None
+    hostname: str | None = None
+    access_token: str | None = None
+    force_reload: bool = False
+
+    @property
+    def effective_label_config(self) -> str | None:
+        return self.schema_ or self.label_config
+
+
+class PredictRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tasks: list[dict[str, Any]] = Field(default_factory=list)
+    label_config: str | None = None
+    force_reload: bool = False

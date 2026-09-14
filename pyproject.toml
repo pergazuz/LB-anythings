@@ -1,0 +1,123 @@
+[project]
+name = "lb-anythings"
+version = "0.1.0"
+description = "Detector-agnostic Label Studio ML backend: bounding-box pre-annotation with an active-learning loop."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "pyyaml>=6.0",
+    "psutil>=5.9",
+]
+
+[project.scripts]
+lb-anythings = "lb_anythings.bootstrap.main:main"
+
+[dependency-groups]
+# The detector/trainer stack. Installed by default (`uv sync`) so the served backend can load a
+# Detector; the test suite never needs it, so CI runs `uv sync --no-default-groups --group dev`.
+ml = [
+    "ultralytics>=8.3.40",
+    "torch>=2.7.0",
+    "torchvision>=0.22.0",
+    "opencv-python>=4.9.0.80",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "import-linter>=2",
+    "mypy>=1.10",
+    "types-PyYAML",
+    "types-psutil",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lb_anythings"]
+
+# --- Torch built for CUDA 12.8 (required for RTX 50-series / Blackwell, sm_120). ---
+# Never reinstall torch from the default PyPI index: it will be CPU-only or old-CUDA.
+[tool.uv]
+default-groups = ["ml", "dev"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "gpu: needs a real Checkpoint and a GPU; runs only when LB_TEST_CHECKPOINT is set",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+files = ["src", "tests"]
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["cv2", "cv2.*", "ultralytics", "ultralytics.*"]
+ignore_missing_imports = true
+
+# --- The dependency rule, enforced. Runs in CI and as a pytest test. ---
+[tool.importlinter]
+root_package = "lb_anythings"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Rings: bootstrap -> adapters -> application -> domain"
+type = "layers"
+layers = [
+    "lb_anythings.bootstrap",
+    "lb_anythings.adapters",
+    "lb_anythings.application",
+    "lb_anythings.domain",
+]
+
+# import-linter has no allow-list contract, so "standard library only" is approximated by
+# forbidding every third-party package the project depends on. Add new dependencies here.
+[[tool.importlinter.contracts]]
+name = "Domain imports none of the project's third-party dependencies"
+type = "forbidden"
+source_modules = ["lb_anythings.domain"]
+forbidden_modules = [
+    "fastapi", "starlette", "pydantic", "pydantic_settings", "httpx", "uvicorn",
+    "numpy", "cv2", "ultralytics", "torch", "yaml", "psutil",
+]
+
+[[tool.importlinter.contracts]]
+name = "Application imports no frameworks or drivers"
+type = "forbidden"
+source_modules = ["lb_anythings.application"]
+forbidden_modules = [
+    "fastapi", "starlette", "pydantic", "pydantic_settings", "httpx", "uvicorn",
+    "cv2", "ultralytics", "torch", "yaml", "psutil",
+]
+
+[[tool.importlinter.contracts]]
+name = "Adapters are independent of one another"
+type = "independence"
+modules = [
+    "lb_anythings.adapters.inbound.http",
+    "lb_anythings.adapters.inbound.cli",
+]
