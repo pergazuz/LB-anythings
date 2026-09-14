@@ -1,6 +1,6 @@
 """In-memory implementations of the outbound ports. Hand-written, no mocking library."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +10,7 @@ from lb_anythings.application.project_context import Credentials
 from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
 from lb_anythings.domain.errors import MediaUnavailable
+from lb_anythings.domain.example import Example
 
 
 def image(width: int, height: int) -> Image:
@@ -60,3 +61,24 @@ class FakeMediaResolver:
             return self.images[reference]
         except KeyError:
             raise MediaUnavailable(f"no such image: {reference}") from None
+
+
+class InMemoryExampleStore:
+    def __init__(self) -> None:
+        self._examples: dict[str, tuple[Example, Image]] = {}
+
+    def save(self, example: Example, image: Image) -> None:
+        self._examples[example.task_id] = (example, image)
+
+    def positive_count(self) -> int:
+        return sum(1 for example, _ in self._examples.values() if example.is_positive)
+
+    def all(self) -> Sequence[Example]:
+        return [example for example, _ in self._examples.values()]
+
+
+class SynchronousBackgroundRunner:
+    """Runs the job before returning, so a test sees its effects right after the request."""
+
+    def run(self, job: Callable[[], object]) -> None:
+        job()

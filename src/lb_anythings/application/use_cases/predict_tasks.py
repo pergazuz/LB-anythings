@@ -6,11 +6,7 @@ from dataclasses import dataclass
 
 from lb_anythings.application.detector_cache import DetectorCache
 from lb_anythings.application.ports import Detector, TaskMediaResolver
-from lb_anythings.application.project_context import (
-    Credentials,
-    ProjectContext,
-    ProjectContextHolder,
-)
+from lb_anythings.application.project_context import ProjectContext
 from lb_anythings.application.use_cases.setup_project import SetupProject
 from lb_anythings.domain.annotation_target import AnnotationTarget
 from lb_anythings.domain.detection import Detection
@@ -33,12 +29,10 @@ class PredictionBatch:
 class PredictTasks:
     def __init__(
         self,
-        context_holder: ProjectContextHolder,
         setup_project: SetupProject,
         detector_cache: DetectorCache,
         media: TaskMediaResolver,
     ) -> None:
-        self._context_holder = context_holder
         self._setup_project = setup_project
         self._detector_cache = detector_cache
         self._media = media
@@ -49,11 +43,9 @@ class PredictTasks:
         label_config: str | None = None,
         force_reload: bool = False,
     ) -> PredictionBatch:
-        context = self._context_holder.get()
+        context = self._setup_project.current_or_establish(label_config)
         if context is None:
-            if not label_config:
-                return PredictionBatch(None, (), None)
-            context = self._setup_project(label_config, Credentials())
+            return PredictionBatch(None, (), None)
 
         detector = self._detector_cache.current(force_reload=force_reload)
         predictions = tuple(self._predict_one(task, context, detector) for task in tasks)

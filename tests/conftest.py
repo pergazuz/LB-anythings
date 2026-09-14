@@ -15,7 +15,9 @@ from lb_anythings.domain.detection import Detection
 from tests.fakes import (
     FakeMediaResolver,
     InMemoryCheckpointRepository,
+    InMemoryExampleStore,
     ScriptedDetectorFactory,
+    SynchronousBackgroundRunner,
     image,
 )
 
@@ -24,11 +26,12 @@ BEST = Path("best.pt")
 
 @dataclass
 class Fakes:
-    """The outbound fakes behind one app, plus the one setup most predict tests share."""
+    """The outbound fakes behind one app, plus the one setup most tests share."""
 
     checkpoints: InMemoryCheckpointRepository
     detectors: ScriptedDetectorFactory
     media: FakeMediaResolver
+    examples: InMemoryExampleStore
 
     def serve(self, detections: Sequence[Detection] = ()) -> None:
         """A Checkpoint whose Detector scripts `detections`, and an image at `a.jpg`."""
@@ -39,7 +42,11 @@ class Fakes:
     @property
     def ports(self) -> Ports:
         return Ports(
-            checkpoints=self.checkpoints, detector_factory=self.detectors, media=self.media
+            checkpoints=self.checkpoints,
+            detector_factory=self.detectors,
+            media=self.media,
+            examples=self.examples,
+            background=SynchronousBackgroundRunner(),
         )
 
 
@@ -51,7 +58,12 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
 
 @pytest.fixture
 def fakes() -> Fakes:
-    return Fakes(InMemoryCheckpointRepository(), ScriptedDetectorFactory(), FakeMediaResolver())
+    return Fakes(
+        InMemoryCheckpointRepository(),
+        ScriptedDetectorFactory(),
+        FakeMediaResolver(),
+        InMemoryExampleStore(),
+    )
 
 
 @pytest.fixture

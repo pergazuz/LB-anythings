@@ -61,6 +61,10 @@ One image together with its ground-truth boxes, kept for training. There is one 
 Task; a later Annotation of the same Task replaces it.
 _Avoid_: sample, label, training data
 
+**Ground-Truth Box**:
+A box an Annotator confirmed, with the label they gave it. What an Example is made of.
+_Avoid_: region (Label Studio's word for it on the wire), detection (a Detector's guess)
+
 **Training Set**:
 All Examples collected so far. The train/validation split is not a domain concept.
 _Avoid_: dataset, ls_data, corpus

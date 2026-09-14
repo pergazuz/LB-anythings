@@ -1,6 +1,6 @@
 """Outbound ports: everything the application needs from the world, as Protocols."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 from lb_anythings.application.project_context import Credentials
 from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
+from lb_anythings.domain.example import Example
 
 
 @dataclass(frozen=True)
@@ -46,3 +47,19 @@ class TaskMediaResolver(Protocol):
     def load(self, reference: str, credentials: Credentials) -> Image:
         """Return the decoded image, or raise MediaUnavailable."""
         ...
+
+
+class ExampleStore(Protocol):
+    """Where the Training Set accumulates. Saving an Example for a Task again replaces it."""
+
+    def save(self, example: Example, image: Image) -> None: ...
+
+    def positive_count(self) -> int: ...
+
+    def all(self) -> Sequence[Example]: ...
+
+
+class BackgroundRunner(Protocol):
+    """Runs a job after the HTTP response has gone out. A thread in production."""
+
+    def run(self, job: Callable[[], object]) -> None: ...

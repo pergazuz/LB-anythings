@@ -253,7 +253,7 @@ bounding-box project by pointing it at a different Checkpoint and data directory
 - Four rings, each a subpackage: `domain` (entities, value objects, pure rules and
   typed errors), `application` (ports declared as Protocols, use cases, and the
   detector cache service), `adapters` (inbound: `http`, `cli`; outbound: `yolo`,
-  `filesystem`, `subprocess`, `labelstudio`, `opencv`), and `bootstrap` (settings
+  `filesystem`, `subprocess`, `labelstudio`, `opencv`, `background`), and `bootstrap` (settings
   and the composition root).
 - import-linter contracts, run in CI and as a pytest test: `domain` imports only the
   standard library; `application` imports `domain` (and numpy, for the image type
@@ -281,9 +281,10 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   the same name when one exists, otherwise to the first target label. A single-class
   Detector therefore always lands on the project's label regardless of its class
   name.
-- Example: task id, a stored copy of the image, and zero or more (box, label)
-  pairs. Identity is the task id; saving again replaces. Zero boxes is a valid
-  negative Example.
+- Example: task id and zero or more Ground-Truth Boxes (box plus the Annotator's label).
+  The image is stored beside it by the Example Store. Identity is the task id; saving
+  again replaces. Zero boxes is a valid negative Example. An Annotator's label is kept
+  as given; only a missing label takes the project's first.
 - Training Set size is the number of Examples with at least one box; negatives are
   stored but not counted, matching the previous backend.
 - Retrain rule, evaluated after each Example is saved: launch when the size is at
@@ -310,7 +311,8 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   a `NullDetector` that returns no Detections and reports version `none`, used when
   no Checkpoint exists.
 - `CheckpointRepository`: latest() returns the latest Checkpoint or none.
-- `ExampleStore`: save(example); positive_count(); all().
+- `ExampleStore`: save(example, image); positive_count(); all(). The image travels beside
+  the Example as an application-level value: the domain holds no pixels.
 - `Trainer`: start() returns a Training Run or raises `TrainingAlreadyActive`;
   active() returns the active run or none; refresh(run) returns the run with its
   current status.
@@ -335,8 +337,10 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   reloads under a lock when newer, or when forced); for each Task loads the image,
   detects, maps labels, converts to Label Studio percent regions. A Task whose image
   fails to load yields an empty Prediction and a warning; the batch succeeds.
-- IngestAnnotation(event): if no project context, returns skipped with a reason;
-  ignores cancelled or skipped Annotations; builds an Example from the Annotation's
+- IngestAnnotation(event): if no project context and the event carries no usable label
+  config, returns skipped with a reason (events carry the project's config, which
+  establishes the context the same way a predict request's does); ignores cancelled or
+  skipped Annotations; builds an Example from the Annotation's
   rectangle regions only; loads the image through the resolver and saves the
   Example; applies the retrain rule and starts the Trainer if due. Returns what it
   did (stored, box count, set size, training launched or the refusal reason).
@@ -360,10 +364,9 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   returns `results` (one Prediction per Task, in order) and `model_version`. With no
   project context and no label config it returns empty results and a null version.
 - `POST /webhook` accepts `action` plus the event payload. `ANNOTATION_CREATED` and
-  `ANNOTATION_UPDATED` schedule IngestAnnotation; `START_TRAINING` schedules
-  TrainOnProject with the project id from the payload; other actions are logged and
-  ignored. Always 201: `job_id` when scheduled, or `status: "skipped"` with a
-  `reason` when there is no project context.
+  `ANNOTATION_UPDATED` schedule IngestAnnotation; `START_TRAINING` schedules TrainOnProject with the project id from the payload; other
+  actions are logged and skipped. Always 201: `job_id` when scheduled, or `status: "skipped"`
+  with a `reason` otherwise (no project context, an unhandled action, an unusable config).
 - `POST /train` behaves exactly like a `START_TRAINING` webhook.
 - `GET /is_training` returns the truthful boolean.
 - `GET /metrics` returns an empty object. `POST /versions` returns the known

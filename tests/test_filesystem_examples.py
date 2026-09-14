@@ -1,0 +1,89 @@
+"""Contract of the filesystem Example Store: the YOLO layout the previous backend also wrote."""
+
+from pathlib import Path
+
+import pytest
+
+from lb_anythings.adapters.outbound.filesystem.examples import FilesystemExampleStore
+from lb_anythings.domain.annotation import GroundTruthBox
+from lb_anythings.domain.example import Example
+from lb_anythings.domain.geometry import Box
+from tests.fakes import image
+
+PIPE_BOX = GroundTruthBox(Box(0.1, 0.1, 0.6, 0.6), "pipe")
+CAR_BOX = GroundTruthBox(Box(0.0, 0.0, 0.5, 0.25), "car")
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> FilesystemExampleStore:
+    pytest.importorskip("cv2", reason="saving encodes JPEG with the ML dependency group")
+    return FilesystemExampleStore(tmp_path / "examples")
+
+
+def test_saving_writes_the_image_the_yolo_lines_and_the_classes_file(
+    store: FilesystemExampleStore, tmp_path: Path
+) -> None:
+    store.save(Example("7", (PIPE_BOX,)), image(200, 100))
+
+    root = tmp_path / "examples"
+    assert (root / "images/task7.jpg").stat().st_size > 0
+    assert (root / "labels/task7.txt").read_text() == "0 0.350000 0.350000 0.500000 0.500000\n"
+    assert (root / "classes.txt").read_text() == "pipe\n"
+
+
+def test_new_labels_are_appended_to_the_classes_file_in_first_seen_order(
+    store: FilesystemExampleStore, tmp_path: Path
+) -> None:
+    store.save(Example("7", (PIPE_BOX,)), image(200, 100))
+    store.save(Example("8", (CAR_BOX, PIPE_BOX)), image(200, 100))
+
+    assert (tmp_path / "examples/classes.txt").read_text() == "pipe\ncar\n"
+    lines = (tmp_path / "examples/labels/task8.txt").read_text().splitlines()
+    assert [line.split()[0] for line in lines] == ["1", "0"]
+
+
+def test_saving_the_same_task_again_replaces_both_files(
+    store: FilesystemExampleStore, tmp_path: Path
+) -> None:
+    image_file = tmp_path / "examples/images/task7.jpg"
+    store.save(Example("7", (PIPE_BOX, PIPE_BOX)), image(200, 100))
+    first_image = image_file.read_bytes()
+
+    store.save(Example("7", (PIPE_BOX,)), image(100, 50))
+
+    [example] = store.all()
+    assert (example.task_id, len(example.boxes)) == ("7", 1)
+    assert image_file.read_bytes() != first_image
+
+
+def test_a_negative_example_is_stored_but_not_counted(store: FilesystemExampleStore) -> None:
+    store.save(Example("9", ()), image(200, 100))
+    store.save(Example("7", (PIPE_BOX,)), image(200, 100))
+
+    assert store.positive_count() == 1
+    assert {e.task_id: e.is_positive for e in store.all()} == {"7": True, "9": False}
+
+
+def test_an_empty_store_has_nothing(tmp_path: Path) -> None:
+    store = FilesystemExampleStore(tmp_path / "examples")
+
+    assert store.positive_count() == 0
+    assert list(store.all()) == []
+
+
+def test_the_previous_backends_layout_is_read_without_conversion(tmp_path: Path) -> None:
+    root = tmp_path / "examples"
+    (root / "images").mkdir(parents=True)
+    (root / "labels").mkdir()
+    (root / "images/task10.jpg").write_bytes(b"jpeg bytes")
+    (root / "labels/task10.txt").write_text("0 0.350000 0.350000 0.500000 0.500000")  # no newline
+    (root / "images/task11.jpg").write_bytes(b"jpeg bytes")
+    (root / "labels/task11.txt").write_text("")
+    (root / "classes.txt").write_text("pipe\n")
+    store = FilesystemExampleStore(root)
+
+    assert store.positive_count() == 1
+    examples = {e.task_id: e for e in store.all()}
+    assert examples["10"].boxes[0].label == "pipe"
+    assert examples["10"].boxes[0].box.coordinates() == pytest.approx((0.1, 0.1, 0.6, 0.6))
+    assert examples["11"].boxes == ()
