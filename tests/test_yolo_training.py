@@ -1,5 +1,6 @@
 """Contract of the trainer's layout builder: the Training Set becomes a fresh train/val layout."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -7,8 +8,10 @@ import yaml
 
 from lb_anythings.adapters.outbound.yolo.training import (
     ExampleFiles,
+    TrainingConfig,
     build_training_layout,
     split_for_training,
+    training_arguments,
 )
 from lb_anythings.domain.errors import NotEnoughExamples
 
@@ -90,3 +93,38 @@ def test_multiple_classes_keep_their_indices(tmp_path: Path) -> None:
 def test_a_store_without_class_names_is_refused_with_advice(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="classes file"):
         build_training_layout(_files(tmp_path, 4), [], tmp_path / "dataset", minimum=4)
+
+
+CONFIG = TrainingConfig(
+    base_model="yolo11s.pt",
+    epochs=1,
+    patience=3,
+    imgsz=640,
+    batch=2,
+    device="0",
+    lr0=None,
+    run_name="active",
+    min_examples=4,
+)
+
+
+def test_the_run_output_path_is_absolute(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # ultralytics reads a relative `project` against its own runs directory, which would put
+    # the Checkpoint where the Detector never looks.
+    monkeypatch.chdir(tmp_path)
+    layout = build_training_layout(
+        _files(tmp_path / "examples", 4), ["pipe"], Path("dataset"), minimum=4
+    )
+
+    arguments = training_arguments(layout, Path("data/runs"), CONFIG)
+
+    assert Path(str(arguments["project"])).is_absolute()
+    assert Path(str(arguments["project"])) == (tmp_path / "data/runs").resolve()
+    assert Path(str(arguments["data"])).is_absolute()
+
+
+def test_an_optional_learning_rate_is_passed_only_when_set(tmp_path: Path) -> None:
+    layout = build_training_layout(_files(tmp_path, 4), ["pipe"], tmp_path / "d", minimum=4)
+
+    assert "lr0" not in training_arguments(layout, tmp_path, CONFIG)
+    assert training_arguments(layout, tmp_path, replace(CONFIG, lr0=0.005))["lr0"] == 0.005

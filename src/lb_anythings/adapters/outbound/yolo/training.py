@@ -108,6 +108,32 @@ def build_training_layout(
     return TrainingLayout(layout_root, description, len(train), len(val))
 
 
+def training_arguments(
+    layout: TrainingLayout, runs_root: Path, config: TrainingConfig
+) -> dict[str, object]:
+    """What ultralytics is asked to do.
+
+    `project` is resolved: ultralytics reads a relative one against its own runs directory,
+    which would put the Checkpoint somewhere the Detector never looks.
+    """
+    arguments: dict[str, object] = {
+        "data": str(layout.description.resolve()),
+        "epochs": config.epochs,
+        "patience": config.patience,
+        "imgsz": config.imgsz,
+        "batch": config.batch,
+        "device": config.device,
+        "project": str(runs_root.resolve()),
+        "name": config.run_name,
+        "exist_ok": True,
+        "workers": 0,  # Windows-safe: no forked data-loader workers
+        "verbose": False,
+    }
+    if config.lr0 is not None:
+        arguments["lr0"] = config.lr0
+    return arguments
+
+
 def run_training(
     *,
     examples: Sequence[ExampleFiles],
@@ -120,20 +146,5 @@ def run_training(
 
     from ultralytics import YOLO  # deferred: importing torch takes seconds and a GPU context
 
-    arguments: dict[str, object] = {
-        "data": str(layout.description),
-        "epochs": config.epochs,
-        "patience": config.patience,
-        "imgsz": config.imgsz,
-        "batch": config.batch,
-        "device": config.device,
-        "project": str(runs_root),
-        "name": config.run_name,
-        "exist_ok": True,
-        "workers": 0,  # Windows-safe: no forked data-loader workers
-        "verbose": False,
-    }
-    if config.lr0 is not None:
-        arguments["lr0"] = config.lr0
-    YOLO(config.base_model).train(**arguments)
-    return TrainingReport(layout, checkpoint_path(runs_root, config.run_name))
+    YOLO(config.base_model).train(**training_arguments(layout, runs_root, config))
+    return TrainingReport(layout, checkpoint_path(runs_root.resolve(), config.run_name))
