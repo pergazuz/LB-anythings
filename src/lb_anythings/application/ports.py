@@ -1,7 +1,7 @@
 """Outbound ports: everything the application needs from the world, as Protocols."""
 
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import numpy as np
@@ -161,4 +161,85 @@ class FrameSource(Protocol):
 
     def frame_at(self, index: int) -> Image | None:
         """One frame by index, or None when it cannot be read."""
+        ...
+
+
+@dataclass(frozen=True)
+class ServiceCommand:
+    """One long-running Service of the Stack: what to run, and where it answers when it is up."""
+
+    name: str
+    command: tuple[str, ...]
+    url: str  # what an Operator opens
+    health_path: str = "/health"
+    environment: Mapping[str, str] = field(default_factory=dict)
+    # Whether stopping it should stop what it spawned. True for a Service with
+    # workers; false for one whose children are meant to outlive it.
+    stop_descendants: bool = True
+
+    @property
+    def health_url(self) -> str:
+        return f"{self.url.rstrip('/')}{self.health_path}"
+
+
+class ServiceProcess(Protocol):
+    """A Service this process started, and is therefore responsible for stopping."""
+
+    def running(self) -> bool: ...
+
+    def stop(self) -> None:
+        """Stop it and everything it spawned. Stopping one already stopped does nothing."""
+        ...
+
+
+class ServiceLauncher(Protocol):
+    def launch(self, service: ServiceCommand) -> ServiceProcess: ...
+
+
+class HealthProbe(Protocol):
+    def answers(self, url: str) -> bool:
+        """Whether anything answered at all. A Service still starting up does not."""
+        ...
+
+
+@dataclass(frozen=True)
+class LabelStudioProject:
+    id: int
+    title: str
+
+
+@dataclass(frozen=True)
+class ConnectedModel:
+    """A model Label Studio already has on a project."""
+
+    url: str
+    interactive: bool  # whether it is asked for a Prediction while a Task is open
+
+
+class LabelStudioProjectAdmin(Protocol):
+    """The project side of Label Studio's API: what connecting a project by hand would do.
+
+    Every method raises ProjectWiringFailed when Label Studio will not play along.
+    """
+
+    def project(self, project_id: int) -> LabelStudioProject | None: ...
+
+    def project_titled(self, title: str) -> LabelStudioProject | None:
+        """The project with exactly this title, or None. The first, if somehow there are two."""
+        ...
+
+    def create_project(self, title: str, label_config: str) -> LabelStudioProject: ...
+
+    def connected_models(self, project_id: int) -> Sequence[ConnectedModel]: ...
+
+    def connect_model(self, project_id: int, url: str, title: str) -> None:
+        """Connect this backend as the project's model, with interactive Predictions on.
+
+        Label Studio health-checks the URL and calls its `/setup` before accepting it, so the
+        backend has to be answering already.
+        """
+        ...
+
+    def enable_training_on_submit(self, project_id: int) -> None:
+        """Switch on the toggle without which no Annotation ever reaches the backend."""
         ...

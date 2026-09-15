@@ -23,3 +23,11 @@ class ProjectExportFailed(RuntimeError):
 
 class NoCheckpointAvailable(RuntimeError):
     """There is no Checkpoint to work from: nothing has been trained and none is configured."""
+
+
+class ServiceDidNotStart(RuntimeError):
+    """A Service of the Stack never answered, or stopped before it did."""
+
+
+class ProjectWiringFailed(RuntimeError):
+    """Label Studio would not set the project up the way the loop needs it."""

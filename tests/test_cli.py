@@ -13,6 +13,7 @@ from lb_anythings.application.use_cases.mine_hard_frames import (
 )
 from lb_anythings.bootstrap.main import main
 from lb_anythings.bootstrap.settings import Settings
+from lb_anythings.bootstrap.stack import StackOptions
 from lb_anythings.domain.errors import NoCheckpointAvailable, NotEnoughExamples
 
 
@@ -218,3 +219,75 @@ def test_mine_without_a_checkpoint_explains_itself(
 
     assert main(["mine"], mine=refusing) == 1
     assert "train a Checkpoint first" in capsys.readouterr().err
+
+
+class FakeUp:
+    def __init__(self) -> None:
+        self.options: list[StackOptions] = []
+
+    def __call__(self, settings: Settings, options: StackOptions) -> int:
+        self.options.append(options)
+        return 0
+
+
+def test_up_with_no_flags_runs_the_whole_stack_and_wires_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    up = FakeUp()
+
+    assert main(["up"], up=up) == 0
+
+    assert up.options == [StackOptions()]
+
+
+def test_up_passes_every_flag_through(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    up = FakeUp()
+
+    main(
+        [
+            "up",
+            "--project",
+            "7",
+            "--title",
+            "Pipes",
+            "--new",
+            "--label",
+            "car",
+            "--label",
+            "truck",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "9099",
+            "--no-label-studio",
+            "--no-mlflow",
+            "--no-wiring",
+            "--no-open",
+            "--quiet",
+        ],
+        up=up,
+    )
+
+    assert up.options == [
+        StackOptions(
+            project_id=7,
+            title="Pipes",
+            always_create=True,
+            labels=("car", "truck"),
+            label_studio=False,
+            mlflow=False,
+            wire=False,
+            host="127.0.0.1",
+            port=9099,
+            quiet=True,
+            open_browser=False,
+        )
+    ]
+
+
+def test_up_returns_what_it_was_told(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["up"], up=lambda settings, options: 1) == 1

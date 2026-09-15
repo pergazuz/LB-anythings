@@ -25,6 +25,8 @@ Label Studio, and reads that project's existing examples without conversion.
 - **Records.** Every training run is logged to MLflow with its metrics, its settings and a copy
   of the checkpoint it produced, so you can see whether labelling is still paying off and go
   back to a better checkpoint.
+- **Runs.** `lb-anythings up` starts Label Studio, this backend and the MLflow UI together and
+  wires the project to them, for a project you already have or one it creates on the spot.
 
 ## Requirements
 
@@ -40,6 +42,48 @@ Label Studio, and reads that project's existing examples without conversion.
 git clone https://github.com/pergazuz/LB-anythings
 cd LB-anythings
 uv sync                       # includes the ML stack: ultralytics, torch (cu128), opencv
+uv run lb-anythings up        # Label Studio, the MLflow UI, the backend, and the wiring
+```
+
+`up` is the whole thing in one command. It starts each of the three, waits until each answers,
+finds or creates the Label Studio project, connects this backend to it as a model, switches on
+**Start model training on annotation submission**, and opens the project in your browser:
+
+```
+  label-studio  http://localhost:8080             started
+  mlflow        http://127.0.0.1:5000             started
+  backend       http://127.0.0.1:9090             started
+  logs          C:\...\LB-anythings\data\logs
+
+  project: pipe_detection (#1, existing, model already connected)
+  open it: http://localhost:8080/projects/1/data
+
+Ctrl+C stops what `up` started; anything already running is left alone.
+```
+
+Label Studio has to be installed for `up` to start it -- `uv tool install label-studio`, or
+`pip install label-studio` -- or you can point `LB_LABEL_STUDIO_COMMAND` at however you start
+yours. To wire the project, `up` also needs `LABEL_STUDIO_API_KEY` (below). Without it the
+three still come up and the command tells you what to do next.
+
+Anything already answering is **adopted**, not started, and is left running when `up` stops. So
+`up` beside a Label Studio you started yourself works, and running it twice is harmless.
+
+```powershell
+uv run lb-anythings up                        # find or create the LB_PROJECT_TITLE project
+uv run lb-anythings up --project 1            # wire this project, whatever it is called
+uv run lb-anythings up --new --title "Valves" --label valve --label flange
+uv run lb-anythings up --no-label-studio      # beside one you run yourself
+uv run lb-anythings up --no-wiring            # start the three, change nothing in Label Studio
+```
+
+A created project gets a labeling config built from your training set's `classes.txt`, or from
+`--label`. Each service's output is echoed with a `[name]` prefix and written to
+`data\logs\<name>.log`; `--quiet` turns the echo off and leaves the log files alone.
+
+### Or run just the backend
+
+```powershell
 uv run lb-anythings serve     # http://0.0.0.0:9090
 ```
 
@@ -53,9 +97,10 @@ $env:LB_CHECKPOINT = "C:\path\to\best.pt"
 uv run lb-anythings serve
 ```
 
-## Connect it to Label Studio
+## Connecting it by hand
 
-In the project, **Settings → Model → Connect Model**:
+What `up` does through the API, in case you would rather do it yourself or are connecting to a
+Label Studio it cannot start. In the project, **Settings → Model → Connect Model**:
 
 - **Name:** anything, for example `lb-anythings`
 - **Backend URL:** `http://localhost:9090`. If Label Studio runs in Docker, use
@@ -108,10 +153,13 @@ The labeling interface must have exactly one `RectangleLabels` control bound to 
 ## Commands
 
 ```powershell
-uv run lb-anythings serve [--host H] [--port P]   # the ML backend
-uv run lb-anythings train                         # one training run, here, now
-uv run lb-anythings mine [--video V] [...]        # write the hardest frames of a video
+uv run lb-anythings up [--project N] [--new] [...]  # the whole stack, wired to a project
+uv run lb-anythings serve [--host H] [--port P]     # just the ML backend
+uv run lb-anythings train                           # one training run, here, now
+uv run lb-anythings mine [--video V] [...]          # write the hardest frames of a video
 ```
+
+`up --help` lists the rest: `--title`, `--label`, `--no-mlflow`, `--no-open`, `--quiet`.
 
 `train` is also what the server spawns for you when the retrain threshold trips or you press
 Start Training: it *is* the training run, so it does not itself check whether another one is
@@ -138,7 +186,7 @@ That is the point of it: they are the frames the detector is worst at.
 ## What each training run recorded
 
 Every run is logged to MLflow, on this machine, into a SQLite file. Nothing leaves the machine
-and there is no account to create. To look at it:
+and there is no account to create. `up` serves it at http://127.0.0.1:5000; on its own:
 
 ```powershell
 uv run mlflow ui --backend-store-uri sqlite:///data/mlflow/mlflow.db
@@ -237,6 +285,15 @@ Paths are logged resolved, so that line says where the backend will really write
 | `LB_TRACKING_URI` | SQLite in `<data dir>/mlflow` | MLflow tracking URI; a server URL also works |
 | `LB_TRACKING_EXPERIMENT` | `lb-anythings` | the MLflow experiment to record under |
 | `LB_TRACKING_SYSTEM_METRICS` | `true` | also sample CPU, memory and GPU during a run |
+| `LB_STACK_LABEL_STUDIO` | `true` | `up` starts (or adopts) Label Studio |
+| `LB_STACK_MLFLOW` | `true` | ...and the MLflow UI |
+| `LB_STACK_TIMEOUT` | `180` | seconds to wait for a service to answer; a first Label Studio start migrates |
+| `LB_LABEL_STUDIO_COMMAND` | unset | how to start Label Studio; default: `label-studio` on PATH |
+| `LB_LABEL_STUDIO_DATA_DIR` | unset | Label Studio's own store; default: its own |
+| `LB_TRACKING_UI_URL` | `http://127.0.0.1:5000` | where the MLflow UI is served |
+| `LB_BACKEND_URL` | unset | how Label Studio reaches this backend; default `http://localhost:<port>` |
+| `LB_PROJECT` | unset | the project id `up` wires, whatever it is called |
+| `LB_PROJECT_TITLE` | `LB-anythings` | ...or the title it finds, and creates when there is none |
 | `LB_MINE_VIDEO` | unset | video to mine |
 | `LB_MINE_STRIDE` | `15` | score every Nth frame |
 | `LB_MINE_TOPN` | `40` | how many frames to keep |
@@ -247,6 +304,8 @@ Paths are logged resolved, so that line says where the backend will really write
 | `LB_MINE_OUT` | `<data dir>/hard_frames` | where mined frames go |
 | `LABEL_STUDIO_URL` | unset | Label Studio's base URL (`LABEL_STUDIO_HOSTNAME` also works) |
 | `LABEL_STUDIO_API_KEY` | unset | Label Studio access token |
+| `LABEL_STUDIO_USERNAME` | unset | only for a Label Studio with no user yet: `up` creates one |
+| `LABEL_STUDIO_PASSWORD` | unset | ...with this password, passed in its environment, not its command line |
 
 Under the data directory:
 
@@ -261,6 +320,7 @@ data/
 ├── mlflow/mlflow.db         what each training run recorded
 ├── mlflow/artifacts/        each run's archived checkpoints
 ├── cache/                   images fetched from Label Studio
+├── logs/                    what each service of the stack printed
 └── hard_frames/             what `mine` writes
 ```
 
@@ -339,8 +399,8 @@ uv run lint-imports                       # the dependency rule, enforced
 ```
 
 The code is a hexagon: `domain` (pure rules), `application` (use cases and the ports they
-need), `adapters` (inbound HTTP and CLI; outbound YOLO, filesystem, Label Studio, OpenCV,
-subprocess, background), `bootstrap` (settings and the composition root). Dependencies only
+need), `adapters` (inbound HTTP and CLI; outbound YOLO, filesystem, Label Studio, MLflow,
+OpenCV, subprocess, HTTP, background), `bootstrap` (settings and the composition root). Dependencies only
 ever point inward, and `lint-imports` fails the build when they do not.
 
 The vocabulary is in [CONTEXT.md](CONTEXT.md), the decisions worth keeping in

@@ -144,4 +144,5 @@ modules = [
     "lb_anythings.adapters.outbound.background",
     "lb_anythings.adapters.outbound.subprocess",
     "lb_anythings.adapters.outbound.opencv",
+    "lb_anythings.adapters.outbound.http",
 ]

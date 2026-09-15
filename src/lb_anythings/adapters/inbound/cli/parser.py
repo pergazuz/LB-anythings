@@ -26,6 +26,54 @@ def build_parser() -> argparse.ArgumentParser:
         "metrics land on one row",
     )
 
+    up = commands.add_parser(
+        "up",
+        help="run Label Studio, the MLflow UI and this backend together, wired to a project",
+    )
+    up.add_argument(
+        "--project", type=int, default=None, help="wire this project id (default: LB_PROJECT)"
+    )
+    up.add_argument(
+        "--title",
+        default=None,
+        help="the project title to find, or create (default: LB_PROJECT_TITLE)",
+    )
+    up.add_argument(
+        "--new", action="store_true", help="create a project even when that title is taken"
+    )
+    up.add_argument(
+        "--label",
+        action="append",
+        dest="labels",
+        metavar="LABEL",
+        help="a label a created project offers; repeat for more (default: the Training Set's)",
+    )
+    up.add_argument("--host", default=None, help="bind address for the backend")
+    up.add_argument("--port", type=int, default=None, help="port for the backend")
+    up.add_argument(
+        "--no-label-studio",
+        dest="label_studio",
+        action="store_false",
+        help="do not start Label Studio; one is expected at LABEL_STUDIO_URL",
+    )
+    up.add_argument(
+        "--no-mlflow", dest="mlflow", action="store_false", help="do not start the MLflow UI"
+    )
+    up.add_argument(
+        "--no-wiring",
+        dest="wire",
+        action="store_false",
+        help="start the Services and change nothing in Label Studio",
+    )
+    up.add_argument(
+        "--no-open", dest="open_browser", action="store_false", help="do not open the project"
+    )
+    up.add_argument(
+        "--quiet",
+        action="store_true",
+        help="do not echo what the Services print; their logs still have all of it",
+    )
+
     mine = commands.add_parser(
         "mine", help="write the frames of a video the Detector is least sure about"
     )

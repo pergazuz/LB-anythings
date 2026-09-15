@@ -10,6 +10,8 @@ from lb_anythings.adapters.outbound.yolo.training import checkpoint_path
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LABEL_STUDIO_URL = "http://localhost:8080"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="LB_", env_file=".env", extra="ignore")
@@ -44,6 +46,17 @@ class Settings(BaseSettings):
     tracking_experiment: str = "lb-anythings"
     tracking_system_metrics: bool = True  # CPU, memory and GPU while a Training Run works
 
+    # The Stack: what `up` runs together, and the project it wires them to
+    stack_label_studio: bool = True  # start (or adopt) Label Studio
+    stack_mlflow: bool = True  # ...and the MLflow UI
+    stack_timeout: float = Field(default=180.0, gt=0)  # a first Label Studio start migrates
+    label_studio_command: str | None = None  # default: `label-studio` on PATH
+    label_studio_data_dir: Path | None = None  # default: Label Studio's own
+    tracking_ui_url: str = "http://127.0.0.1:5000"
+    backend_url: str | None = None  # how Label Studio reaches this backend, if not localhost
+    project: int | None = None  # wire exactly this project, whatever it is called
+    project_title: str = "LB-anythings"  # ...or find and create by this title
+
     # Mining Hard Frames
     mine_video: Path | None = None
     mine_stride: int = Field(default=15, ge=1)
@@ -60,6 +73,13 @@ class Settings(BaseSettings):
     )
     label_studio_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("LABEL_STUDIO_API_KEY")
+    )
+    # Only used to set up a Label Studio that has no user yet: it creates one on first start.
+    label_studio_username: str | None = Field(
+        default=None, validation_alias=AliasChoices("LABEL_STUDIO_USERNAME")
+    )
+    label_studio_password: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("LABEL_STUDIO_PASSWORD")
     )
 
     @field_validator("data_dir", "checkpoint", "mine_out", mode="after")
@@ -94,6 +114,25 @@ class Settings(BaseSettings):
     @property
     def cache_dir(self) -> Path:
         return self.data_dir / "cache"
+
+    @property
+    def logs_dir(self) -> Path:
+        """What each Service of the Stack printed, one file each."""
+        return self.data_dir / "logs"
+
+    @property
+    def label_studio_base(self) -> str:
+        """Where Label Studio is, whether this process starts it or adopts it."""
+        return (self.label_studio_url or DEFAULT_LABEL_STUDIO_URL).rstrip("/")
+
+    @property
+    def backend_reachable_at(self) -> str:
+        """How Label Studio must reach this backend: not the bind address, which may be 0.0.0.0.
+
+        A Label Studio in a container needs `http://host.docker.internal:<port>` instead, which
+        is what LB_BACKEND_URL is for.
+        """
+        return (self.backend_url or f"http://localhost:{self.port}").rstrip("/")
 
     @property
     def hard_frames_dir(self) -> Path:

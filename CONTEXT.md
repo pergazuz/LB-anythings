@@ -91,3 +91,16 @@ _Avoid_: source, cause, reason (a reason is why a run did *not* start)
 A video frame the Detector is uncertain about, and therefore worth labelling next.
 _Avoid_: hard example (an Example is already labelled; a Hard Frame is not), hard
 case, difficult frame
+
+### Running it
+
+**Stack**:
+Label Studio, this backend and the tracking UI, running together as one thing an
+Operator starts. `lb-anythings up` brings it up and wires the project to it.
+_Avoid_: environment, deployment, cluster, the app
+
+**Service**:
+One long-running program of the Stack, reachable at a URL. A Service that already
+answers is *adopted* rather than started, and is never stopped by whoever adopted it.
+_Avoid_: server (the backend is one of three), container, process (a Training Run is
+a process and is not a Service)

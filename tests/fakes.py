@@ -7,12 +7,24 @@ from typing import Any
 
 import numpy as np
 
-from lb_anythings.application.ports import ExportedTask, Image, LaunchFacts
+from lb_anythings.application.ports import (
+    ConnectedModel,
+    ExportedTask,
+    Image,
+    LabelStudioProject,
+    LaunchFacts,
+    ServiceCommand,
+)
 from lb_anythings.application.project_context import Credentials
 from lb_anythings.domain.annotation import first_usable_annotation
 from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
-from lb_anythings.domain.errors import MediaUnavailable, ProjectExportFailed, TrainingAlreadyActive
+from lb_anythings.domain.errors import (
+    MediaUnavailable,
+    ProjectExportFailed,
+    ProjectWiringFailed,
+    TrainingAlreadyActive,
+)
 from lb_anythings.domain.example import Example
 from lb_anythings.domain.task import Task
 from lb_anythings.domain.training_run import RunStatus, TrainingRun
@@ -166,3 +178,128 @@ class FakeExperimentTracker:
     def record_launch(self, facts: LaunchFacts) -> str | None:
         self.launches.append(facts)
         return self._run_id
+
+
+class FakeClock:
+    """Time that only moves when something sleeps, so a wait costs a test nothing."""
+
+    def __init__(self) -> None:
+        self.time = 0.0
+        self.slept: list[float] = []
+
+    def now(self) -> float:
+        return self.time
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.time += seconds
+
+
+class FakeHealthProbe:
+    """Answers for the URLs it has been told about, after however many polls they need."""
+
+    def __init__(self) -> None:
+        self.polls: dict[str, int] = {}  # url -> polls still to go before it answers
+        self.probed: list[str] = []
+
+    def answering(self, url: str, after: int = 0) -> None:
+        self.polls[url] = after
+
+    def answers(self, url: str) -> bool:
+        self.probed.append(url)
+        remaining = self.polls.get(url)
+        if remaining is None:
+            return False
+        if remaining <= 0:
+            return True
+        self.polls[url] = remaining - 1
+        return False
+
+
+class FakeService:
+    def __init__(self, name: str, journal: list[str], *, alive: bool = True) -> None:
+        self.name = name
+        self._journal = journal
+        self._alive = alive
+
+    def running(self) -> bool:
+        return self._alive
+
+    def stop(self) -> None:
+        if self._alive:
+            self._journal.append(f"stop {self.name}")
+        self._alive = False
+
+
+class FakeServiceLauncher:
+    """Launches nothing; tells the probe that what it launched now answers."""
+
+    def __init__(self, probe: FakeHealthProbe, journal: list[str] | None = None) -> None:
+        self.probe = probe
+        self.journal = journal if journal is not None else []
+        self.launched: list[ServiceCommand] = []
+        self.answers_after: dict[str, int] = {}  # name -> polls before it answers
+        self.never_answers: set[str] = set()
+        self.dies: set[str] = set()  # names that exit without ever answering
+
+    def launch(self, service: ServiceCommand) -> FakeService:
+        self.launched.append(service)
+        self.journal.append(f"launch {service.name}")
+        if service.name in self.dies:
+            return FakeService(service.name, self.journal, alive=False)
+        if service.name not in self.never_answers:
+            self.probe.answering(service.health_url, self.answers_after.get(service.name, 0))
+        return FakeService(service.name, self.journal)
+
+
+class FakeProjectAdmin:
+    """Label Studio's project side, in a dict. Raises what the real one raises."""
+
+    def __init__(self, journal: list[str] | None = None) -> None:
+        self.journal = journal if journal is not None else []
+        self.projects: dict[int, LabelStudioProject] = {}
+        self.configs: dict[int, str] = {}
+        self.models: dict[int, list[ConnectedModel]] = {}
+        self.training_on_submit: list[int] = []
+        self.fail_with: str | None = None
+
+    def add(
+        self, project_id: int, title: str, models: Sequence[ConnectedModel] = ()
+    ) -> LabelStudioProject:
+        project = LabelStudioProject(project_id, title)
+        self.projects[project_id] = project
+        self.models[project_id] = list(models)
+        return project
+
+    def project(self, project_id: int) -> LabelStudioProject | None:
+        self._check()
+        return self.projects.get(project_id)
+
+    def project_titled(self, title: str) -> LabelStudioProject | None:
+        self._check()
+        return next((p for p in self.projects.values() if p.title == title), None)
+
+    def create_project(self, title: str, label_config: str) -> LabelStudioProject:
+        self._check()
+        project = self.add(max(self.projects, default=0) + 1, title)
+        self.configs[project.id] = label_config
+        self.journal.append(f"create {title}")
+        return project
+
+    def connected_models(self, project_id: int) -> Sequence[ConnectedModel]:
+        self._check()
+        return list(self.models.get(project_id, []))
+
+    def connect_model(self, project_id: int, url: str, title: str) -> None:
+        self._check()
+        self.models.setdefault(project_id, []).append(ConnectedModel(url, True))
+        self.journal.append(f"connect {url}")
+
+    def enable_training_on_submit(self, project_id: int) -> None:
+        self._check()
+        self.training_on_submit.append(project_id)
+        self.journal.append(f"train-on-submit {project_id}")
+
+    def _check(self) -> None:
+        if self.fail_with:
+            raise ProjectWiringFailed(self.fail_with)

@@ -17,6 +17,7 @@ from lb_anythings.application.use_cases.mine_hard_frames import (
 )
 from lb_anythings.bootstrap.container import build_app, mine_with_yolo, train_with_yolo
 from lb_anythings.bootstrap.settings import Settings, log_effective_settings
+from lb_anythings.bootstrap.stack import StackOptions, run_stack
 from lb_anythings.domain.errors import NoCheckpointAvailable, NotEnoughExamples
 from lb_anythings.domain.hard_frames import UncertaintyBand
 
@@ -41,6 +42,10 @@ class Train(Protocol):
     def __call__(self, settings: Settings, tracked_as: str | None = None) -> TrainingReport: ...
 
 
+class Up(Protocol):
+    def __call__(self, settings: Settings, options: StackOptions) -> int: ...
+
+
 class Mine(Protocol):
     def __call__(
         self,
@@ -56,6 +61,7 @@ def main(
     run_server: RunServer = uvicorn.run,
     train: Train = train_with_yolo,
     mine: Mine = mine_with_yolo,
+    up: Up = run_stack,
 ) -> int:
     args = parse_args(argv)
     settings = Settings()
@@ -72,6 +78,9 @@ def main(
         )
         return 0
 
+    if args.command == "up":
+        return up(settings, _stack_options(args))
+
     if args.command == "train":
         return _train(settings, train, args.tracked_as)
 
@@ -79,6 +88,22 @@ def main(
         return _mine(settings, args, mine)
 
     raise AssertionError(f"unhandled command {args.command!r}")  # the parser rejects others
+
+
+def _stack_options(args: argparse.Namespace) -> StackOptions:
+    return StackOptions(
+        project_id=args.project,
+        title=args.title,
+        always_create=args.new,
+        labels=tuple(args.labels or ()),
+        label_studio=args.label_studio,
+        mlflow=args.mlflow,
+        wire=args.wire,
+        host=args.host,
+        port=args.port,
+        quiet=args.quiet,
+        open_browser=args.open_browser,
+    )
 
 
 def _train(settings: Settings, train: Train, tracked_as: str | None) -> int:
