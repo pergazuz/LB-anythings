@@ -87,11 +87,15 @@ class Pick(Protocol):
 
 def write_frames(picks: Iterable[Pick], out_dir: Path) -> list[Path]:
     """Write each pick as `hard_<index>_s<score>.jpg`, so a labelled frame is traceable."""
+    chosen = list(picks)
+    if not chosen:
+        return []  # nothing to encode, so nothing to load an encoder for
+
     import cv2  # deferred: part of the ML dependency group
 
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
-    for pick in picks:
+    for pick in chosen:
         path = out_dir / f"hard_{pick.index:06d}_s{int(pick.score)}.jpg"
         if cv2.imwrite(str(path), pick.image.pixels):
             written.append(path)

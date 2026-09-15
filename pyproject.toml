@@ -85,9 +85,16 @@ module = ["cv2", "cv2.*"]
 ignore_missing_imports = true
 
 # ultralytics ships types but re-exports lazily; we treat it as untyped rather than chase it.
+# `ignore_missing_imports` matters as much as the skip: CI builds without the optional groups,
+# so these modules are not merely untyped there, they are absent.
 [[tool.mypy.overrides]]
 module = ["ultralytics", "ultralytics.*"]
 follow_imports = "skip"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["mlflow", "mlflow.*"]
+ignore_missing_imports = true
 
 # --- The dependency rule, enforced. Runs in CI and as a pytest test. ---
 [tool.importlinter]

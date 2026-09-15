@@ -8,13 +8,19 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # `uv run` syncs the default groups before it runs anything, which would undo the sync
+    # below and pull torch, the CUDA libraries, opencv and mlflow -- gigabytes, for a suite
+    # that needs none of them. UV_NO_SYNC makes every `uv run` use the environment as built.
+    env:
+      UV_NO_SYNC: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
       - run: uv python install 3.11
-      # The test suite never needs the ML stack; it runs against fakes.
+      # The test suite never needs the ML stack or MLflow; it runs against fakes, and the
+      # adapters that do need them skip. Building without them is what proves that.
       - run: uv sync --no-default-groups --group dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
