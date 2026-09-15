@@ -82,8 +82,18 @@ class SubprocessTrainer:
             return self._start(tracked_as, training_set_size)
 
     def trained_at_size(self) -> int | None:
+        """The Training Set size the last Training Run launched on.
+
+        None when that run failed: nothing was learned from those Examples, so the next
+        Annotation should be free to try again rather than wait out a whole step. A run dies
+        for reasons that do not repeat -- a machine asleep, a driver reset, a console event --
+        and a Training Set that never retrains again is a worse failure than one extra attempt.
+        """
         record = self._read()
-        return record.training_set_size if record else None
+        if record is None:
+            return None
+        run = self.refresh(TrainingRun(record.id, record.started_at, RunStatus.RUNNING))
+        return None if run.status is RunStatus.FAILED else record.training_set_size
 
     def _start(self, tracked_as: str | None, training_set_size: int | None) -> TrainingRun:
         if self.active() is not None:

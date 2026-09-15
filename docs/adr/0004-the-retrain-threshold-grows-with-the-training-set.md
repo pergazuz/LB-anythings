@@ -63,6 +63,16 @@ The baseline is the Training Set size **at launch**, recorded in the run record 
 already keeps. Launch rather than completion, because it is written exactly once per run and
 cannot re-trigger a run that is still going.
 
+A run that *fails* reports no baseline at all, so the next Annotation is free to try again
+rather than wait out a step for Examples nothing ever learned from. This is not hypothetical:
+an end-to-end pass caught a Training Run killed nine seconds in by
+`forrtl: error (200): program aborting due to window-CLOSE event`, a Windows console event
+reaching the Intel Fortran runtime underneath torch. It did not reproduce on the next pass, and
+the service handled it correctly — the run was derived as failed, `/is_training` went false and
+the previous Checkpoint kept serving — but the Training Set would have been stranded until 368
+Examples for a run that never happened. The retry costs at most one extra attempt per
+Annotation, and Annotations are human-paced.
+
 When there is no run record at all — a fresh install, or Examples migrated from the previous
 backend — there is no baseline and the first Training Run starts as soon as `LB_MIN_EXAMPLES`
 is met. This is a deliberate change: previously, migrating 333 Examples meant waiting for 350

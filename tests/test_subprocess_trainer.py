@@ -153,3 +153,27 @@ def test_the_spawned_run_keeps_the_rest_of_the_environment(
 
     assert _wait_until(written.exists)
     assert written.read_text() == "0.4"
+
+
+def test_the_baseline_for_the_next_retrain_is_what_the_last_run_launched_on(
+    tmp_path: Path,
+) -> None:
+    trainer = _trainer(tmp_path, WRITES_CHECKPOINT)
+    assert trainer.trained_at_size() is None  # nothing has trained yet
+
+    run = trainer.start(training_set_size=334)
+
+    assert _wait_until(lambda: trainer.refresh(run).status is RunStatus.SUCCEEDED)
+    assert trainer.trained_at_size() == 334
+
+
+def test_a_failed_run_leaves_no_baseline_so_the_next_annotation_can_try_again(
+    tmp_path: Path,
+) -> None:
+    """Nothing was learned from those Examples; waiting out a whole step would strand them."""
+    trainer = _trainer(tmp_path, EXITS_WITHOUT_CHECKPOINT)
+
+    run = trainer.start(training_set_size=334)
+
+    assert _wait_until(lambda: trainer.refresh(run).status is RunStatus.FAILED)
+    assert trainer.trained_at_size() is None
