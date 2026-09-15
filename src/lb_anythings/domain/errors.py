@@ -15,3 +15,7 @@ class TrainingAlreadyActive(RuntimeError):
 
 class NotEnoughExamples(ValueError):
     """The Training Set is too small to split into training and validation."""
+
+
+class ProjectExportFailed(RuntimeError):
+    """Label Studio did not hand over the project's tasks."""

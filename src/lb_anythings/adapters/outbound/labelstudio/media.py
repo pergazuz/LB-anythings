@@ -18,12 +18,10 @@ import httpx
 import numpy as np
 
 from lb_anythings.application.ports import Image
-from lb_anythings.application.project_context import Credentials
+from lb_anythings.application.project_context import NO_CREDENTIALS, Credentials, same_host
 from lb_anythings.domain.errors import MediaUnavailable
 
 logger = logging.getLogger(__name__)
-
-NO_CREDENTIALS = Credentials()
 
 
 class _Kind(Enum):
@@ -38,10 +36,6 @@ def _classify(reference: str) -> _Kind:
     if reference.startswith(("http://", "https://")):
         return _Kind.ABSOLUTE_URL
     return _Kind.LOCAL_FILE
-
-
-def _same_host(a: str, b: str) -> bool:
-    return urlparse(a).netloc.lower() == urlparse(b).netloc.lower()
 
 
 class LabelStudioMediaResolver:
@@ -64,7 +58,8 @@ class LabelStudioMediaResolver:
                 raise MediaUnavailable(f"cannot resolve image reference {reference!r}")
             return _decode(path.read_bytes(), reference)
 
-        hostname, token = self._effective(credentials)
+        effective = credentials.resolved_against(self._defaults)
+        hostname = effective.hostname
         if kind is _Kind.LABEL_STUDIO_PATH:
             if not hostname:
                 raise MediaUnavailable(
@@ -73,23 +68,13 @@ class LabelStudioMediaResolver:
                 )
             url, authorized = hostname.rstrip("/") + reference, True
         else:
-            url, authorized = reference, hostname is not None and _same_host(reference, hostname)
-        headers = {"Authorization": f"Token {token}"} if authorized and token else {}
+            url, authorized = reference, hostname is not None and same_host(reference, hostname)
+        headers = (
+            {"Authorization": f"Token {effective.access_token}"}
+            if authorized and effective.access_token
+            else {}
+        )
         return _decode(self._fetch_cached(url, headers, reference), reference)
-
-    def _effective(self, credentials: Credentials) -> tuple[str | None, str | None]:
-        """Setup's credentials win as a pair over the configured defaults.
-
-        When setup names a hostname but sends no token, the configured token is used only if
-        that hostname is the configured host; it never travels to a host setup introduced.
-        """
-        if credentials.hostname:
-            token = credentials.access_token
-            configured = self._defaults.hostname
-            if token is None and configured and _same_host(credentials.hostname, configured):
-                token = self._defaults.access_token
-            return credentials.hostname, token
-        return self._defaults.hostname, credentials.access_token or self._defaults.access_token
 
     def _fetch_cached(self, url: str, headers: dict[str, str], reference: str) -> bytes:
         entry = self._cache_dir / _cache_name(url)

@@ -8,9 +8,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from lb_anythings.application.project_context import Credentials
+from lb_anythings.domain.annotation import Annotation
 from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
 from lb_anythings.domain.example import Example
+from lb_anythings.domain.task import Task
 from lb_anythings.domain.training_run import TrainingRun
 
 
@@ -78,3 +80,20 @@ class Trainer(Protocol):
         ...
 
     def refresh(self, run: TrainingRun) -> TrainingRun: ...
+
+
+@dataclass(frozen=True)
+class ExportedTask:
+    """A Task as a project export lists it, with its first non-cancelled Annotation if any."""
+
+    task: Task
+    annotation: Annotation | None
+
+
+class LabelStudioProjectClient(Protocol):
+    def exported_tasks(self, project_id: int, credentials: Credentials) -> Sequence[ExportedTask]:
+        """Every Task of the project, each with its Annotation if it has a usable one.
+
+        Raises ProjectExportFailed when Label Studio does not hand the tasks over.
+        """
+        ...

@@ -321,8 +321,9 @@ bounding-box project by pointing it at a different Checkpoint and data directory
 - `TaskMediaResolver`: load(image reference, credentials) returns a decoded image or
   raises `MediaUnavailable`. Images cross ports as decoded arrays with known width
   and height; downloading, caching and decoding live in adapters.
-- `LabelStudioProjectClient`: annotated_tasks(project id, credentials) returns each
-  Task with its first non-cancelled Annotation's regions.
+- `LabelStudioProjectClient`: exported_tasks(project id, credentials) returns every
+  Task of the project, each with its first non-cancelled Annotation when it has one,
+  else none, so the caller can count what it could not collect.
 - `FrameSource`: opened on a video; exposes frame count and frame size; iterates
   (index, image) at a stride; reads a specific index.
 - `BackgroundRunner`: run(callable). A thread in production; synchronous in tests.
@@ -346,10 +347,12 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   rectangle regions only; loads the image through the resolver and saves the
   Example; applies the retrain rule and starts the Trainer if due. Returns what it
   did (stored, box count, set size, training launched or the refusal reason).
-- TrainOnProject(project id): requires a Label Studio URL and API key (from setup or
-  settings) and a project id, else `MissingLabelStudioCredentials`; pulls annotated
-  Tasks; saves each as an Example; launches a Training Run if the set meets the
-  minimum and none is active. Returns the collected count and the training outcome.
+- TrainOnProject(project id): requires a Label Studio URL and API key (setup's
+  credentials filled in from the configured ones, as a pair) and a project id; when
+  any is missing it refuses with a reason naming the settings to set, since the
+  webhook must answer 201 either way. Otherwise it pulls the project's Tasks, saves
+  each annotated one as an Example, and launches a Training Run if the Training Set
+  meets the minimum and none is active. Returns the counts and the training outcome.
 - ReportStatus(): current version, whether a Training Run is active (after
   refreshing its status), and the list of known versions.
 - MineHardFrames(parameters): iterates the FrameSource at the stride, detects with
@@ -490,9 +493,11 @@ bounding-box project by pointing it at a different Checkpoint and data directory
 - Standard-library logging, one logger per adapter and one for the application.
 - Domain and application errors are typed: `InvalidLabelConfig`,
   `MediaUnavailable`, `TrainingAlreadyActive`, `NotEnoughExamples`,
-  `MissingLabelStudioCredentials`. The HTTP adapter maps `InvalidLabelConfig` to
-  400; prediction failures are isolated per Task; webhook work runs in the
-  background and its outcome, success or failure, is logged, never returned.
+  `ProjectExportFailed`. The HTTP adapter maps `InvalidLabelConfig` to 400;
+  prediction failures are isolated per Task; webhook work runs in the background and
+  its outcome, success or failure, is logged, never returned. A webhook that cannot
+  proceed at all (no project context, missing credentials, no project id) is refused
+  synchronously with a reason rather than by raising, because it must answer 201.
 
 ### Migration from the previous backend
 

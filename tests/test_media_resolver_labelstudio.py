@@ -5,11 +5,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from lb_anythings.adapters.outbound.labelstudio.media import (
-    NO_CREDENTIALS,
-    LabelStudioMediaResolver,
-)
-from lb_anythings.application.project_context import Credentials
+from lb_anythings.adapters.outbound.labelstudio.media import LabelStudioMediaResolver
+from lb_anythings.application.project_context import NO_CREDENTIALS, Credentials
 from lb_anythings.domain.errors import MediaUnavailable
 
 SETUP = Credentials(hostname="http://ls-from-setup:8080", access_token="setup-token")

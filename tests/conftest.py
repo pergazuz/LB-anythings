@@ -19,6 +19,7 @@ from tests.fakes import (
     InMemoryCheckpointRepository,
     InMemoryExampleStore,
     ScriptedDetectorFactory,
+    ScriptedProjectClient,
     SynchronousBackgroundRunner,
     image,
 )
@@ -35,6 +36,7 @@ class Fakes:
     media: FakeMediaResolver
     examples: InMemoryExampleStore
     trainer: FakeTrainer
+    project: ScriptedProjectClient
 
     def serve(self, detections: Sequence[Detection] = ()) -> None:
         """A Checkpoint whose Detector scripts `detections`, and an image at `a.jpg`."""
@@ -51,6 +53,7 @@ class Fakes:
             examples=self.examples,
             background=SynchronousBackgroundRunner(),
             trainer=self.trainer,
+            project_client=self.project,
         )
 
 
@@ -76,6 +79,7 @@ def fakes() -> Fakes:
         FakeMediaResolver(),
         InMemoryExampleStore(),
         FakeTrainer(),
+        ScriptedProjectClient(),
     )
 
 

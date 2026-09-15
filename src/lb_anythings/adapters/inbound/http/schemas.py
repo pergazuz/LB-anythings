@@ -41,3 +41,11 @@ class WebhookRequest(BaseModel):
     @property
     def effective_label_config(self) -> str | None:
         return self.label_config or (self.project or {}).get("label_config")
+
+    @property
+    def project_id(self) -> int | None:
+        raw = (self.project or {}).get("id")
+        try:
+            return int(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None

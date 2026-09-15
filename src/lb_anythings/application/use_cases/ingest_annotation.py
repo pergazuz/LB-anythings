@@ -5,18 +5,15 @@ import threading
 from dataclasses import dataclass
 from typing import Literal
 
-from lb_anythings.application.ports import ExampleStore, TaskMediaResolver, Trainer
+from lb_anythings.application.example_recording import ExampleRecorder
+from lb_anythings.application.ports import ExampleStore, Trainer
 from lb_anythings.application.use_cases.setup_project import SetupProject
-from lb_anythings.domain.annotation import Annotation, GroundTruthBox
-from lb_anythings.domain.annotation_target import AnnotationTarget, parse_label_config
-from lb_anythings.domain.errors import InvalidLabelConfig, MediaUnavailable, TrainingAlreadyActive
-from lb_anythings.domain.example import Example
+from lb_anythings.domain.annotation import Annotation
+from lb_anythings.domain.errors import TrainingAlreadyActive
 from lb_anythings.domain.retraining import RetrainDecision, RetrainPolicy, decide_retrain
 from lb_anythings.domain.task import Task
 
 logger = logging.getLogger(__name__)
-
-NOT_SET_UP = "the backend is not set up for a project yet; connect it in Label Studio first"
 
 
 @dataclass(frozen=True)
@@ -44,13 +41,13 @@ class IngestAnnotation:
     def __init__(
         self,
         setup_project: SetupProject,
-        media: TaskMediaResolver,
+        recorder: ExampleRecorder,
         examples: ExampleStore,
         trainer: Trainer,
         policy: RetrainPolicy,
     ) -> None:
         self._setup_project = setup_project
-        self._media = media
+        self._recorder = recorder
         self._examples = examples
         self._trainer = trainer
         self._policy = policy
@@ -58,15 +55,7 @@ class IngestAnnotation:
 
     def rejection(self, event: AnnotationEvent) -> str | None:
         """Why this event cannot be ingested at all, decided before any work is scheduled."""
-        if self._setup_project.current() is not None:
-            return None
-        if not event.label_config:
-            return NOT_SET_UP
-        try:
-            parse_label_config(event.label_config)
-        except InvalidLabelConfig as e:
-            return f"the event's label config is unusable: {e}"
-        return None
+        return self._setup_project.not_ready_reason(event.label_config)
 
     def __call__(self, event: AnnotationEvent) -> IngestOutcome:
         outcome = self._ingest(event)
@@ -97,26 +86,15 @@ class IngestAnnotation:
             return _skipped(rejection)
         context = self._setup_project.current_or_establish(event.label_config)
         assert context is not None  # rejection() guarantees it
-        if event.annotation.cancelled:
-            return _skipped("the annotation was cancelled or skipped")
-        if event.task.id is None:
-            return _skipped("the event names no task")
-        reference = event.task.image_reference(context.target)
-        if reference is None:
-            return _skipped(f"the task has no {context.target.image_field!r} field")
-        try:
-            image = self._media.load(reference, context.credentials)
-        except MediaUnavailable as e:
-            return _skipped(str(e))
-
-        boxes = tuple(_ground_truth(region, context.target) for region in event.annotation.regions)
-        self._examples.save(Example(str(event.task.id), boxes), image)
+        reason = self._recorder.record(event.task, event.annotation, context)
+        if reason:
+            return _skipped(reason)
         with self._retrain_lock:  # one decision at a time, so a threshold launches one run
             size = self._examples.positive_count()
             decision = self._retrain(size)
         return IngestOutcome(
             "stored",
-            box_count=len(boxes),
+            box_count=len(event.annotation.regions),
             training_set_size=size,
             training_launched=decision.should_train,
             training_reason=decision.reason,
@@ -136,10 +114,3 @@ class IngestAnnotation:
         except TrainingAlreadyActive as e:
             return RetrainDecision(False, str(e))
         return decision
-
-
-def _ground_truth(region: GroundTruthBox, target: AnnotationTarget) -> GroundTruthBox:
-    """An Annotator's label is kept as given; only a missing one takes the project's first."""
-    if region.label or not target.labels:
-        return region
-    return GroundTruthBox(region.box, target.labels[0])

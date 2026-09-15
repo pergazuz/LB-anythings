@@ -3,15 +3,18 @@
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
-from lb_anythings.application.ports import Image
+from lb_anythings.application.ports import ExportedTask, Image
 from lb_anythings.application.project_context import Credentials
+from lb_anythings.domain.annotation import first_usable_annotation
 from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
-from lb_anythings.domain.errors import MediaUnavailable, TrainingAlreadyActive
+from lb_anythings.domain.errors import MediaUnavailable, ProjectExportFailed, TrainingAlreadyActive
 from lb_anythings.domain.example import Example
+from lb_anythings.domain.task import Task
 from lb_anythings.domain.training_run import RunStatus, TrainingRun
 
 
@@ -116,3 +119,24 @@ class FakeTrainer:
 
     def finish(self, run: TrainingRun, *, succeeded: bool) -> None:
         self._status[run.id] = RunStatus.SUCCEEDED if succeeded else RunStatus.FAILED
+
+
+class ScriptedProjectClient:
+    """Answers a project export from raw Label Studio task dicts scripted per project id."""
+
+    def __init__(self) -> None:
+        self.tasks: dict[int, list[dict[str, Any]]] = {}
+        self.requests: list[tuple[int, Credentials]] = []
+        self.fail_with: str | None = None
+
+    def exported_tasks(self, project_id: int, credentials: Credentials) -> Sequence[ExportedTask]:
+        self.requests.append((project_id, credentials))
+        if self.fail_with:
+            raise ProjectExportFailed(self.fail_with)
+        return [
+            ExportedTask(
+                Task(id=item.get("id"), data=item.get("data") or {}),
+                first_usable_annotation(item.get("annotations") or []),
+            )
+            for item in self.tasks.get(project_id, [])
+        ]

@@ -20,6 +20,10 @@ from lb_anythings.application.use_cases.ingest_annotation import AnnotationEvent
 from lb_anythings.application.use_cases.predict_tasks import PredictionBatch, PredictTasks
 from lb_anythings.application.use_cases.report_status import ReportStatus
 from lb_anythings.application.use_cases.setup_project import SetupProject
+from lb_anythings.application.use_cases.train_on_project import (
+    StartTrainingRequest,
+    TrainOnProject,
+)
 from lb_anythings.domain.annotation import parse_annotation
 from lb_anythings.domain.annotation_target import AnnotationTarget
 from lb_anythings.domain.errors import InvalidLabelConfig
@@ -29,6 +33,7 @@ from lb_anythings.domain.task import Task
 logger = logging.getLogger(__name__)
 
 ANNOTATION_ACTIONS = frozenset({"ANNOTATION_CREATED", "ANNOTATION_UPDATED"})
+START_TRAINING = "START_TRAINING"
 
 
 def create_app(
@@ -38,6 +43,7 @@ def create_app(
     setup_project: SetupProject,
     predict_tasks: PredictTasks,
     ingest_annotation: IngestAnnotation,
+    train_on_project: TrainOnProject,
     on_startup: Callable[[], object] = lambda: None,
 ) -> FastAPI:
     @asynccontextmanager
@@ -70,6 +76,8 @@ def create_app(
     @app.post("/webhook")
     def webhook(body: WebhookRequest) -> JSONResponse:
         """Acknowledge at once; the work runs in the background. Label Studio ignores the body."""
+        if body.action == START_TRAINING:
+            return _start_training(body)
         if body.action not in ANNOTATION_ACTIONS:
             return _skipped(f"action {body.action!r} is not handled")
         event = AnnotationEvent(
@@ -79,7 +87,21 @@ def create_app(
         )
         if reason := ingest_annotation.rejection(event):
             return _skipped(reason)
-        background.run(lambda: ingest_annotation(event))
+        return _scheduled(lambda: ingest_annotation(event))
+
+    @app.post("/train")
+    def train(body: WebhookRequest) -> JSONResponse:
+        """Older Label Studio versions call this; it is the Start Training button."""
+        return _start_training(body)
+
+    def _start_training(body: WebhookRequest) -> JSONResponse:
+        request = StartTrainingRequest(body.project_id, body.effective_label_config)
+        if reason := train_on_project.rejection(request):
+            return _skipped(reason)
+        return _scheduled(lambda: train_on_project(request))
+
+    def _scheduled(job: Callable[[], object]) -> JSONResponse:
+        background.run(job)
         return JSONResponse({"job_id": uuid.uuid4().hex}, status_code=201)
 
     @app.get("/is_training")

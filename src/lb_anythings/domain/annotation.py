@@ -1,6 +1,6 @@
 """An Annotation: the human-corrected regions for one Task, as Label Studio sends them."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,3 +43,12 @@ def parse_annotation(payload: Mapping[str, Any]) -> Annotation:
         regions.append(GroundTruthBox(box, str(labels[0]) if labels else ""))
     cancelled = bool(payload.get("was_cancelled") or payload.get("skipped"))
     return Annotation(tuple(regions), cancelled)
+
+
+def first_usable_annotation(payloads: Iterable[Mapping[str, Any]]) -> Annotation | None:
+    """The Task's first Annotation that was not cancelled or skipped, if it has one."""
+    for payload in payloads:
+        annotation = parse_annotation(payload)
+        if not annotation.cancelled:
+            return annotation
+    return None
