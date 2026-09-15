@@ -87,9 +87,7 @@ class LocalServiceLauncher:
             log.close()
             raise
         logger.info("started %s as pid %s", service.name, process.pid)
-        threading.Thread(
-            target=self._pump, args=(service.name, process, log), daemon=True
-        ).start()
+        threading.Thread(target=self._pump, args=(service.name, process, log), daemon=True).start()
         return LocalService(service.name, process, log, service.stop_descendants)
 
     def _pump(self, name: str, process: subprocess.Popen[bytes], log: IO[bytes]) -> None:

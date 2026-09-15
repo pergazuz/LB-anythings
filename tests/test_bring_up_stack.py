@@ -100,9 +100,7 @@ def test_a_service_that_dies_is_not_waited_out() -> None:
     stand.launcher.dies.add("label-studio")
 
     with pytest.raises(ServiceDidNotStart, match="stopped"):
-        stand.bring_up()(
-            StackPlan(services=(LABEL_STUDIO,), ready_timeout=600.0, poll_seconds=1.0)
-        )
+        stand.bring_up()(StackPlan(services=(LABEL_STUDIO,), ready_timeout=600.0, poll_seconds=1.0))
 
     assert stand.clock.now() == 0.0, "a dead Service should not cost a single poll"
 
@@ -214,9 +212,7 @@ def test_new_creates_a_project_even_when_the_title_is_taken() -> None:
     stand = Stand()
     stand.admin.add(7, "LB-anythings")
 
-    stack = stand.bring_up()(
-        StackPlan(services=(BACKEND,), project=a_project(always_create=True))
-    )
+    stack = stand.bring_up()(StackPlan(services=(BACKEND,), project=a_project(always_create=True)))
 
     assert stack.project is not None and stack.project.id != 7
     assert stack.project.created is True

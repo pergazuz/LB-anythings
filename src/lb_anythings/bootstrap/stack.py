@@ -203,9 +203,7 @@ def _labels(settings: Settings) -> tuple[str, ...]:
     return collected or (DEFAULT_LABEL,)
 
 
-def stack_bringer(
-    settings: Settings, echo: Callable[[str], None] | None = None
-) -> BringUpStack:
+def stack_bringer(settings: Settings, echo: Callable[[str], None] | None = None) -> BringUpStack:
     return BringUpStack(
         LocalServiceLauncher(settings.logs_dir, echo),
         HttpHealthProbe(),
@@ -224,7 +222,6 @@ def _is_remote(uri: str | None) -> bool:
 def _port_of(url: str, fallback: int) -> int:
     parsed = urlparse(url)
     return parsed.port or (443 if parsed.scheme == "https" else fallback)
-
 
 
 def run_stack(

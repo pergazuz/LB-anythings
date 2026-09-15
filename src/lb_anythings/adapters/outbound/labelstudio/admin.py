@@ -110,9 +110,7 @@ class LabelStudioAdminClient:
     def _url(self, path: str) -> str:
         hostname = self._credentials.hostname
         if not hostname:
-            raise ProjectWiringFailed(
-                "no Label Studio to wire a project in: set LABEL_STUDIO_URL"
-            )
+            raise ProjectWiringFailed("no Label Studio to wire a project in: set LABEL_STUDIO_URL")
         return path if path.startswith("http") else f"{hostname.rstrip('/')}{path}"
 
     def _headers(self) -> dict[str, str]:

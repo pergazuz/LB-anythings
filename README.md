@@ -395,6 +395,7 @@ uv sync --no-default-groups --group dev   # no ML stack, no MLflow: the tests ne
 uv run pytest -q
 uv run mypy
 uv run ruff check .
+uv run ruff format .                      # CI checks this one too
 uv run lint-imports                       # the dependency rule, enforced
 ```
 

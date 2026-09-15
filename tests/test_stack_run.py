@@ -77,8 +77,9 @@ def test_asking_for_no_wiring_is_not_reported_as_a_missing_token() -> None:
 
 def test_a_model_label_studio_never_asks_is_called_out() -> None:
     """Everything else can be right and no box will ever appear on a Task."""
-    quiet = WiredProject(7, "Pipes", created=False, model_connected=False,
-                         predictions_while_labelling=False)
+    quiet = WiredProject(
+        7, "Pipes", created=False, model_connected=False, predictions_while_labelling=False
+    )
 
     lines = "\n".join(summary(Settings(), StackOptions(), a_stack(quiet)))
 
