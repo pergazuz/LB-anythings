@@ -22,6 +22,9 @@ Label Studio, and reads that project's existing examples without conversion.
   and trains on all of them, including annotations made before the backend was connected.
 - **Mines.** `lb-anythings mine` finds the frames of a video the detector is least sure about,
   so you label its blind spots instead of random frames.
+- **Records.** Every training run is logged to MLflow with its metrics, its settings and a copy
+  of the checkpoint it produced, so you can see whether labelling is still paying off and go
+  back to a better checkpoint.
 
 ## Requirements
 
@@ -121,6 +124,33 @@ uv run lb-anythings mine
 Then import `data\hard_frames` into Label Studio as a new set of tasks and label those next.
 That is the point of it: they are the frames the detector is worst at.
 
+## What each training run recorded
+
+Every run is logged to MLflow, on this machine, into a SQLite file. Nothing leaves the machine
+and there is no account to create. To look at it:
+
+```powershell
+uv run mlflow ui --backend-store-uri sqlite:///data/mlflow/mlflow.db
+# then open http://127.0.0.1:5000
+```
+
+A run carries every training setting as a parameter, box/class/DFL loss and mAP50 and mAP50-95
+per epoch as metrics, and `best.pt` and `last.pt` as artifacts. That last part matters beyond
+curiosity: a training run overwrites `runs/active/weights/best.pt`, so **the archived copy is
+the only way back to an earlier checkpoint**. Runs are named `<run name>-<UTC stamp>`, because
+the folder they train into is always the same one.
+
+The cost is disk. A checkpoint here is about 19 MB and each run archives two of them, so a
+retrain every 25 examples runs to roughly 40 MB per run, a couple of GB after fifty. Prune
+`data\mlflow` when it gets big, or point `LB_TRACKING_URI` at a drive where you do not care.
+
+Tracking needs the `tracking` dependency group, which a plain `uv sync` installs. With it
+absent the trainer behaves exactly as it would otherwise and says nothing about it.
+
+`LB_TRACKING_URI` takes any MLflow tracking URI, so pointing several machines at one server is
+`http://mlflow.local:5000`. It defaults to SQLite because MLflow has deprecated the plain
+directory store, which now refuses to open at all.
+
 ## Settings
 
 Every setting is read once at startup from the environment or a `.env` file in the working
@@ -145,6 +175,9 @@ first line of every run, with the access token masked, so you can always see wha
 | `LB_TRAIN_BATCH` | `8` | batch size |
 | `LB_TRAIN_LR0` | unset | initial learning rate, when you want to set it |
 | `LB_DEVICE` | `0` | training device |
+| `LB_TRACKING` | `true` | record training runs to MLflow |
+| `LB_TRACKING_URI` | SQLite in `<data dir>/mlflow` | MLflow tracking URI; a server URL also works |
+| `LB_TRACKING_EXPERIMENT` | `lb-anythings` | the MLflow experiment to record under |
 | `LB_MINE_VIDEO` | unset | video to mine |
 | `LB_MINE_STRIDE` | `15` | score every Nth frame |
 | `LB_MINE_TOPN` | `40` | how many frames to keep |
@@ -166,6 +199,8 @@ data/
 ├── runs/active/             the training run's output, including weights/best.pt
 ├── runs/active.json, .log   what the current run is, and what it printed
 ├── dataset/                 rebuilt from the training set on every run
+├── mlflow/mlflow.db         what each training run recorded
+├── mlflow/artifacts/        each run's archived checkpoints
 ├── cache/                   images fetched from Label Studio
 └── hard_frames/             what `mine` writes
 ```
@@ -237,7 +272,7 @@ trainer, the media resolver and the frame source.
 ## Working on it
 
 ```powershell
-uv sync --no-default-groups --group dev   # no ML stack: the tests do not need it
+uv sync --no-default-groups --group dev   # no ML stack, no MLflow: the tests need neither
 uv run pytest -q
 uv run mypy
 uv run ruff check .

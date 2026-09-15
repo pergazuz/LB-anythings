@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     train_lr0: float | None = None
     device: str = "0"
 
+    # Experiment tracking: what a Training Run recorded, and where
+    tracking: bool = True  # honoured only when the tracking dependency group is installed
+    tracking_uri: str | None = None  # an MLflow URI; default: SQLite under <data dir>/mlflow
+    tracking_experiment: str = "lb-anythings"
+
     # Mining Hard Frames
     mine_video: Path | None = None
     mine_stride: int = Field(default=15, ge=1)
@@ -75,6 +80,11 @@ class Settings(BaseSettings):
     @property
     def hard_frames_dir(self) -> Path:
         return self.mine_out or self.data_dir / "hard_frames"
+
+    @property
+    def tracking_dir(self) -> Path:
+        """Holds the SQLite store and the archived Checkpoints, unless a URI overrides it."""
+        return self.data_dir / "mlflow"
 
     @property
     def trained_checkpoint(self) -> Path:

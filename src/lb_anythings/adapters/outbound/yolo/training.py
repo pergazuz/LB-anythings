@@ -5,11 +5,13 @@ splits them, copies them into a fresh train/val layout with a data description, 
 The Checkpoint lands at `<runs>/<run name>/weights/best.pt`, where the Detector looks for it.
 """
 
+import os
 import random
 import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -17,6 +19,7 @@ from lb_anythings.domain.errors import NotEnoughExamples
 
 ENCODING = "utf-8"
 VALIDATION_FRACTION = 0.15
+MLFLOW_CALLBACKS = "ultralytics.utils.callbacks.mlflow"
 
 ExampleFiles = tuple[str, Path, Path]  # (task id, image file, label file)
 
@@ -42,6 +45,16 @@ class TrainingLayout:
     description: Path
     train_count: int
     val_count: int
+
+
+@dataclass(frozen=True)
+class TrackingConfig:
+    """Where a Training Run is recorded. Ultralytics' own MLflow callback does the writing."""
+
+    uri: str  # an MLflow tracking URI: a local SQLite file, or a server
+    artifact_dir: Path  # where the run's Checkpoints are archived
+    experiment: str
+    run_name: str
 
 
 @dataclass(frozen=True)
@@ -137,6 +150,48 @@ def training_arguments(
     return arguments
 
 
+def tracking_environment(tracking: TrackingConfig) -> dict[str, str]:
+    """The variables ultralytics' MLflow callback reads."""
+    return {
+        "MLFLOW_TRACKING_URI": tracking.uri,
+        "MLFLOW_EXPERIMENT_NAME": tracking.experiment,
+        "MLFLOW_RUN": tracking.run_name,
+        "MLFLOW_DISABLE_AGENT_HINT": "1",  # keeps a notice for coding agents out of the run log
+    }
+
+
+def ensure_experiment(tracking: TrackingConfig) -> None:
+    """Create the experiment, naming where its artifacts go, unless it already exists.
+
+    Left to itself MLflow writes artifacts under `./mlruns`, relative to whatever directory the
+    Training Run was spawned in -- the same trap as ultralytics' `project`. Creation is the one
+    moment the location can be set, so the Checkpoints are archived where the data directory
+    says rather than wherever the run happened to start.
+    """
+    try:
+        import mlflow  # deferred: the tracking dependency group is optional
+    except ImportError:
+        return
+    tracking.artifact_dir.mkdir(parents=True, exist_ok=True)
+    mlflow.set_tracking_uri(tracking.uri)
+    if mlflow.get_experiment_by_name(tracking.experiment) is None:
+        mlflow.create_experiment(
+            tracking.experiment, artifact_location=tracking.artifact_dir.as_uri()
+        )
+
+
+def silence_tracking(model: Any) -> None:
+    """Drop the MLflow callbacks from this model alone.
+
+    Ultralytics' own switch is a key in a machine-wide settings file, so turning tracking off
+    for one Training Run would change what every other ultralytics project on the machine does.
+    """
+    for event, registered in model.callbacks.items():
+        model.callbacks[event] = [
+            fn for fn in registered if getattr(fn, "__module__", "") != MLFLOW_CALLBACKS
+        ]
+
+
 def run_training(
     *,
     examples: Sequence[ExampleFiles],
@@ -144,12 +199,21 @@ def run_training(
     layout_root: Path,
     runs_root: Path,
     config: TrainingConfig,
+    tracking: TrackingConfig | None = None,
 ) -> TrainingReport:
     layout = build_training_layout(examples, class_names, layout_root, minimum=config.min_examples)
     arguments = training_arguments(layout, runs_root, config)
+    if tracking is not None:
+        ensure_experiment(tracking)
+        # The Training Run is its own process and exits after this, so the environment it
+        # inherits is ours to set: the callback reads these and nothing else.
+        os.environ.update(tracking_environment(tracking))
 
     from ultralytics import YOLO  # deferred: importing torch takes seconds and a GPU context
 
-    YOLO(config.base_model).train(**arguments)
+    model = YOLO(config.base_model)
+    if tracking is None:
+        silence_tracking(model)
+    model.train(**arguments)
     # Read back the resolved `project` rather than resolving again: one rule, one place.
     return TrainingReport(layout, checkpoint_path(Path(str(arguments["project"])), config.run_name))

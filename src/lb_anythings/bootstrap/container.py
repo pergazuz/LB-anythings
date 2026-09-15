@@ -3,6 +3,7 @@
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -17,6 +18,7 @@ from lb_anythings.adapters.outbound.opencv.frames import OpenCvFrameSource, writ
 from lb_anythings.adapters.outbound.subprocess.trainer import SubprocessTrainer
 from lb_anythings.adapters.outbound.yolo.detector import YoloDetectorFactory
 from lb_anythings.adapters.outbound.yolo.training import (
+    TrackingConfig,
     TrainingConfig,
     TrainingReport,
     run_training,
@@ -95,10 +97,29 @@ def production_ports(settings: Settings) -> Ports:
     )
 
 
+def tracking_for(settings: Settings, started_at: datetime | None = None) -> TrackingConfig | None:
+    """Where this Training Run is recorded, or None when tracking is off.
+
+    The run name carries a UTC stamp because the run *folder* is always the same one: every
+    recorded run would otherwise be called `active` and the history would be unreadable.
+    """
+    if not settings.tracking:
+        return None
+    root = settings.tracking_dir.resolve()  # a relative one would follow the working directory
+    stamp = (started_at or datetime.now(UTC)).strftime("%Y%m%dT%H%M%SZ")
+    return TrackingConfig(
+        uri=settings.tracking_uri or f"sqlite:///{(root / 'mlflow.db').as_posix()}",
+        artifact_dir=root / "artifacts",
+        experiment=settings.tracking_experiment,
+        run_name=f"{settings.train_run_name}-{stamp}",
+    )
+
+
 def train_with_yolo(settings: Settings) -> TrainingReport:
     """One Training Run in this process: what `lb-anythings train` does."""
     store = FilesystemExampleStore(settings.examples_dir)
     return run_training(
+        tracking=tracking_for(settings),
         examples=store.training_files(),
         class_names=store.class_names(),
         layout_root=settings.dataset_dir,

@@ -34,6 +34,11 @@ dev = [
     "types-PyYAML",
     "types-psutil",
 ]
+# Experiment tracking. Installed by default so a Training Run is recorded without setup;
+# absent from CI, and the trainer must behave identically when it is not installed.
+tracking = [
+    "mlflow>=2.16",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -45,7 +50,7 @@ packages = ["src/lb_anythings"]
 # --- Torch built for CUDA 12.8 (required for RTX 50-series / Blackwell, sm_120). ---
 # Never reinstall torch from the default PyPI index: it will be CPU-only or old-CUDA.
 [tool.uv]
-default-groups = ["ml", "dev"]
+default-groups = ["ml", "tracking", "dev"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
