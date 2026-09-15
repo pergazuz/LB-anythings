@@ -13,7 +13,7 @@ from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
 from lb_anythings.domain.example import Example
 from lb_anythings.domain.task import Task
-from lb_anythings.domain.training_run import TrainingRun
+from lb_anythings.domain.training_run import RunTrigger, TrainingRun
 
 
 @dataclass(frozen=True)
@@ -68,11 +68,40 @@ class BackgroundRunner(Protocol):
     def run(self, job: Callable[[], object]) -> None: ...
 
 
+@dataclass(frozen=True)
+class LaunchFacts:
+    """What is true of a Training Run when it is launched, and knowable only to its launcher.
+
+    The Training Set size is the one that matters: quality plotted against how much has been
+    labelled is what says whether labelling is still worth doing. The Detector cannot know it,
+    so nothing downstream of the launch can record it.
+    """
+
+    trigger: RunTrigger
+    training_set_size: int
+    serving_version: str  # the Checkpoint this run is trying to beat
+    exported_tasks: int | None = None  # Start Training only: what the project export held
+    unannotated_tasks: int | None = None
+    uncollected_tasks: int | None = None
+
+
+class ExperimentTracker(Protocol):
+    """Records Training Runs. The no-op default keeps the service running untracked."""
+
+    def record_launch(self, facts: LaunchFacts) -> str | None:
+        """Record what the launcher knows; return the id the Training Run continues under."""
+        ...
+
+
 class Trainer(Protocol):
     """Runs Training Runs. At most one is active at a time."""
 
-    def start(self) -> TrainingRun:
-        """Launch a Training Run, or raise TrainingAlreadyActive."""
+    def start(self, tracked_as: str | None = None) -> TrainingRun:
+        """Launch a Training Run, or raise TrainingAlreadyActive.
+
+        `tracked_as` is the recorded run it continues, so the launch facts and the metrics the
+        run itself produces end up on one row rather than two.
+        """
         ...
 
     def active(self) -> TrainingRun | None:

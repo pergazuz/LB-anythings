@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from lb_anythings.application.ports import ExportedTask, Image
+from lb_anythings.application.ports import ExportedTask, Image, LaunchFacts
 from lb_anythings.application.project_context import Credentials
 from lb_anythings.domain.annotation import first_usable_annotation
 from lb_anythings.domain.checkpoint import Checkpoint
@@ -98,13 +98,15 @@ class FakeTrainer:
 
     def __init__(self) -> None:
         self.runs: list[TrainingRun] = []
+        self.tracked_as: list[str | None] = []  # what each run was told to continue
         self._status: dict[str, RunStatus] = {}
 
-    def start(self) -> TrainingRun:
+    def start(self, tracked_as: str | None = None) -> TrainingRun:
         if self.active() is not None:
             raise TrainingAlreadyActive("a Training Run is already active")
         run = TrainingRun(f"run{len(self.runs) + 1}", float(len(self.runs) + 1), RunStatus.RUNNING)
         self.runs.append(run)
+        self.tracked_as.append(tracked_as)
         self._status[run.id] = RunStatus.RUNNING
         return run
 
@@ -140,3 +142,15 @@ class ScriptedProjectClient:
             )
             for item in self.tasks.get(project_id, [])
         ]
+
+
+class FakeExperimentTracker:
+    """Remembers every launch it was told about, and hands back an id to continue."""
+
+    def __init__(self, run_id: str | None = "recorded-run") -> None:
+        self.launches: list[LaunchFacts] = []
+        self._run_id = run_id
+
+    def record_launch(self, facts: LaunchFacts) -> str | None:
+        self.launches.append(facts)
+        return self._run_id

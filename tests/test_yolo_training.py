@@ -10,14 +10,12 @@ import yaml
 from lb_anythings.adapters.outbound.yolo.training import (
     MLFLOW_CALLBACKS,
     ExampleFiles,
-    TrackingConfig,
     TrainingConfig,
     TrainingLayout,
     build_training_layout,
     checkpoint_path,
     silence_tracking,
     split_for_training,
-    tracking_environment,
     training_arguments,
 )
 from lb_anythings.bootstrap.settings import Settings
@@ -162,21 +160,6 @@ def test_an_optional_learning_rate_is_passed_only_when_set(tmp_path: Path) -> No
 
 
 # --- what a Training Run records ---
-
-
-def test_the_callback_is_told_where_to_record_and_under_what_name(tmp_path: Path) -> None:
-    tracking = TrackingConfig(
-        uri="sqlite:///c:/data/mlflow/mlflow.db",
-        artifact_dir=tmp_path / "artifacts",
-        experiment="lb-anythings",
-        run_name="active-20260915T034500Z",
-    )
-
-    environment = tracking_environment(tracking)
-
-    assert environment["MLFLOW_TRACKING_URI"] == "sqlite:///c:/data/mlflow/mlflow.db"
-    assert environment["MLFLOW_EXPERIMENT_NAME"] == "lb-anythings"
-    assert environment["MLFLOW_RUN"] == "active-20260915T034500Z"
 
 
 class _Model:

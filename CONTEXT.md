@@ -75,9 +75,16 @@ is active at a time.
 _Avoid_: fit, job, training session
 
 **Retrain Threshold**:
-The number of Examples the Training Set must grow by before a Training Run starts on
-its own.
+The Training Set size at whose every multiple a Training Run starts on its own. It is
+a property of the size, not of the growth since the last run: with a threshold of 25,
+a Training Set of 333 migrated Examples next trains at 350.
 _Avoid_: train_every, batch size
+
+**Run Trigger**:
+What launched a Training Run: the Retrain Threshold, the Start Training button, or the
+command line. Known only to whatever launched it, so it is recorded at launch or not at
+all.
+_Avoid_: source, cause, reason (a reason is why a run did *not* start)
 
 **Hard Frame**:
 A video frame the Detector is uncertain about, and therefore worth labelling next.

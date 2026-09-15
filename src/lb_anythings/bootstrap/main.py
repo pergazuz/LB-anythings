@@ -37,6 +37,10 @@ class RunServer(Protocol):
     def __call__(self, app: Any, *, host: str, port: int) -> None: ...
 
 
+class Train(Protocol):
+    def __call__(self, settings: Settings, tracked_as: str | None = None) -> TrainingReport: ...
+
+
 class Mine(Protocol):
     def __call__(
         self,
@@ -50,7 +54,7 @@ class Mine(Protocol):
 def main(
     argv: Sequence[str] | None = None,
     run_server: RunServer = uvicorn.run,
-    train: Callable[[Settings], TrainingReport] = train_with_yolo,
+    train: Train = train_with_yolo,
     mine: Mine = mine_with_yolo,
 ) -> int:
     args = parse_args(argv)
@@ -69,7 +73,7 @@ def main(
         return 0
 
     if args.command == "train":
-        return _train(settings, train)
+        return _train(settings, train, args.tracked_as)
 
     if args.command == "mine":
         return _mine(settings, args, mine)
@@ -77,9 +81,9 @@ def main(
     raise AssertionError(f"unhandled command {args.command!r}")  # the parser rejects others
 
 
-def _train(settings: Settings, train: Callable[[Settings], TrainingReport]) -> int:
+def _train(settings: Settings, train: Train, tracked_as: str | None) -> int:
     try:
-        report = train(settings)
+        report = train(settings, tracked_as)
     except NotEnoughExamples as e:
         print(f"cannot train: {e}", file=sys.stderr)
         return 1

@@ -9,6 +9,7 @@ from pydantic import SecretStr
 from lb_anythings.application.project_context import Credentials
 from lb_anythings.bootstrap.container import build_app
 from lb_anythings.bootstrap.settings import Settings
+from lb_anythings.domain.training_run import RunTrigger
 from tests.annotations import RECTANGLE
 from tests.conftest import Fakes
 from tests.label_configs import PIPE
@@ -182,3 +183,26 @@ def test_the_configured_token_never_travels_to_a_host_setup_introduced(
     assert response.json()["status"] == "skipped"
     assert "LABEL_STUDIO_API_KEY" in response.json()["reason"]
     assert fakes.project.requests == []
+
+
+def test_the_run_records_that_the_button_launched_it_and_what_the_export_held(
+    client: TestClient, fakes: Fakes
+) -> None:
+    """Start Training and the Retrain Threshold have to be told apart in the recorded run."""
+    fakes.serve()
+    client.post("/setup", json={"schema": PIPE, **CREDENTIALS})
+    fakes.project.tasks[1] = [
+        exported(11),
+        exported(12),
+        exported(13, image="missing.jpg"),  # unreadable: collected from neither
+        exported(14, result=[]),  # no boxes: stored, but not a positive Example
+        {"id": 15, "data": {"image": "a.jpg"}, "annotations": []},  # unannotated
+    ]
+
+    start_training(client)
+
+    (launch,) = fakes.tracker.launches
+    assert launch.trigger is RunTrigger.START_TRAINING
+    assert launch.training_set_size == 2
+    assert (launch.exported_tasks, launch.unannotated_tasks, launch.uncollected_tasks) == (5, 1, 1)
+    assert fakes.trainer.tracked_as == ["recorded-run"]

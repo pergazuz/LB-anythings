@@ -1,5 +1,6 @@
 """Composition root: wires settings and adapters into the application."""
 
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,11 +15,16 @@ from lb_anythings.adapters.outbound.filesystem.checkpoints import FilesystemChec
 from lb_anythings.adapters.outbound.filesystem.examples import FilesystemExampleStore
 from lb_anythings.adapters.outbound.labelstudio.media import LabelStudioMediaResolver
 from lb_anythings.adapters.outbound.labelstudio.project import LabelStudioExportClient
+from lb_anythings.adapters.outbound.mlflow.tracker import (
+    MlflowExperimentTracker,
+    NullExperimentTracker,
+    TrackingConfig,
+    tracking_environment,
+)
 from lb_anythings.adapters.outbound.opencv.frames import OpenCvFrameSource, write_frames
 from lb_anythings.adapters.outbound.subprocess.trainer import SubprocessTrainer
 from lb_anythings.adapters.outbound.yolo.detector import YoloDetectorFactory
 from lb_anythings.adapters.outbound.yolo.training import (
-    TrackingConfig,
     TrainingConfig,
     TrainingReport,
     run_training,
@@ -30,6 +36,7 @@ from lb_anythings.application.ports import (
     CheckpointRepository,
     DetectorFactory,
     ExampleStore,
+    ExperimentTracker,
     LabelStudioProjectClient,
     TaskMediaResolver,
     Trainer,
@@ -61,6 +68,7 @@ class Ports:
     background: BackgroundRunner
     trainer: Trainer
     project_client: LabelStudioProjectClient
+    tracker: ExperimentTracker
 
 
 def configured_credentials(settings: Settings) -> Credentials:
@@ -94,7 +102,20 @@ def production_ports(settings: Settings) -> Ports:
             checkpoint=settings.trained_checkpoint,
         ),
         project_client=LabelStudioExportClient(),
+        tracker=MlflowExperimentTracker(lambda: tracking_for(settings))
+        if settings.tracking
+        else NullExperimentTracker(),
     )
+
+
+def ensure_tracking_environment(tracking: TrackingConfig, tracked_as: str | None) -> bool:
+    """Put what ultralytics' MLflow callback reads into this process' environment.
+
+    The Training Run is its own process and exits after training, so its environment is ours
+    to set.
+    """
+    os.environ.update(tracking_environment(tracking, tracked_as))
+    return True
 
 
 def tracking_for(settings: Settings, started_at: datetime | None = None) -> TrackingConfig | None:
@@ -115,11 +136,18 @@ def tracking_for(settings: Settings, started_at: datetime | None = None) -> Trac
     )
 
 
-def train_with_yolo(settings: Settings) -> TrainingReport:
-    """One Training Run in this process: what `lb-anythings train` does."""
+def train_with_yolo(settings: Settings, tracked_as: str | None = None) -> TrainingReport:
+    """One Training Run in this process: what `lb-anythings train` does.
+
+    `tracked_as` names the recorded run the launcher already opened, so the launch facts and
+    the metrics this run produces land on one row. Run by hand there is no launcher, and
+    ultralytics' callback opens a run of its own.
+    """
+    tracking = tracking_for(settings)
+    tracked = tracking is not None and ensure_tracking_environment(tracking, tracked_as)
     store = FilesystemExampleStore(settings.examples_dir)
     return run_training(
-        tracking=tracking_for(settings),
+        tracked=tracked,
         examples=store.training_files(),
         class_names=store.class_names(),
         layout_root=settings.dataset_dir,
@@ -175,6 +203,8 @@ def build_app(settings: Settings, ports: Ports | None = None) -> FastAPI:
             ports.examples,
             ports.trainer,
             RetrainPolicy(threshold=settings.retrain_every, minimum=settings.min_examples),
+            ports.tracker,
+            lambda: detector_cache.serving_version,
         ),
         train_on_project=TrainOnProject(
             setup_project,
@@ -182,6 +212,8 @@ def build_app(settings: Settings, ports: Ports | None = None) -> FastAPI:
             recorder,
             ports.examples,
             ports.trainer,
+            ports.tracker,
+            lambda: detector_cache.serving_version,
             minimum_examples=settings.min_examples,
             configured_credentials=configured_credentials(settings),
         ),

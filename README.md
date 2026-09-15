@@ -135,7 +135,21 @@ uv run mlflow ui --backend-store-uri sqlite:///data/mlflow/mlflow.db
 ```
 
 A run carries every training setting as a parameter, box/class/DFL loss and mAP50 and mAP50-95
-per epoch as metrics, and `best.pt` and `last.pt` as artifacts. That last part matters beyond
+per epoch as metrics, and `best.pt` and `last.pt` as artifacts. Alongside those it records what
+only the backend knows at the moment it launched the run:
+
+| Parameter | Meaning |
+|---|---|
+| `trigger` | `retrain-threshold`, `start-training` or `command-line` |
+| `training_set_size` | how many positive examples existed when the run launched |
+| `serving_version` | the checkpoint this run was trying to beat |
+| `exported_tasks`, `unannotated_tasks`, `uncollected_tasks` | Start Training only: what the project export held |
+
+`training_set_size` is the one to plot against. Detector quality on its own says little; mAP
+against how much you have labelled is what tells you whether labelling is still paying off, or
+whether the curve has flattened and your time is better spent elsewhere. Both halves land on
+one row because the backend opens the run, hands its id to the training run, and MLflow
+resumes it. That last part matters beyond
 curiosity: a training run overwrites `runs/active/weights/best.pt`, so **the archived copy is
 the only way back to an earlier checkpoint**. Runs are named `<run name>-<UTC stamp>`, because
 the folder they train into is always the same one.

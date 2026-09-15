@@ -62,7 +62,7 @@ def test_train_reports_the_split_and_the_checkpoint(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    def training(settings: Settings) -> TrainingReport:
+    def training(settings: Settings, tracked_as: str | None = None) -> TrainingReport:
         layout = TrainingLayout(tmp_path / "dataset", tmp_path / "dataset/data.yaml", 17, 3)
         return TrainingReport(layout, tmp_path / "runs/active/weights/best.pt")
 
@@ -78,7 +78,7 @@ def test_train_exits_non_zero_when_the_training_set_is_too_small(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    def refusing(settings: Settings) -> TrainingReport:
+    def refusing(settings: Settings, tracked_as: str | None = None) -> TrainingReport:
         raise NotEnoughExamples("3 positive Examples; need at least 4 to train")
 
     code = main(["train"], train=refusing)

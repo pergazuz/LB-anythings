@@ -14,6 +14,7 @@ from lb_anythings.bootstrap.settings import Settings
 from lb_anythings.domain.checkpoint import Checkpoint
 from lb_anythings.domain.detection import Detection
 from tests.fakes import (
+    FakeExperimentTracker,
     FakeMediaResolver,
     FakeTrainer,
     InMemoryCheckpointRepository,
@@ -37,6 +38,7 @@ class Fakes:
     examples: InMemoryExampleStore
     trainer: FakeTrainer
     project: ScriptedProjectClient
+    tracker: FakeExperimentTracker
 
     def serve(self, detections: Sequence[Detection] = ()) -> None:
         """A Checkpoint whose Detector scripts `detections`, and an image at `a.jpg`."""
@@ -54,6 +56,7 @@ class Fakes:
             background=SynchronousBackgroundRunner(),
             trainer=self.trainer,
             project_client=self.project,
+            tracker=self.tracker,
         )
 
 
@@ -80,6 +83,7 @@ def fakes() -> Fakes:
         InMemoryExampleStore(),
         FakeTrainer(),
         ScriptedProjectClient(),
+        FakeExperimentTracker(),
     )
 
 

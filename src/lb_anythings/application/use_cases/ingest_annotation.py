@@ -2,16 +2,23 @@
 
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
 from lb_anythings.application.example_recording import ExampleRecorder
-from lb_anythings.application.ports import ExampleStore, Trainer
+from lb_anythings.application.ports import (
+    ExampleStore,
+    ExperimentTracker,
+    LaunchFacts,
+    Trainer,
+)
 from lb_anythings.application.use_cases.setup_project import SetupProject
 from lb_anythings.domain.annotation import Annotation
 from lb_anythings.domain.errors import TrainingAlreadyActive
 from lb_anythings.domain.retraining import RetrainDecision, RetrainPolicy, decide_retrain
 from lb_anythings.domain.task import Task
+from lb_anythings.domain.training_run import RunTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +52,16 @@ class IngestAnnotation:
         examples: ExampleStore,
         trainer: Trainer,
         policy: RetrainPolicy,
+        tracker: ExperimentTracker,
+        serving_version: Callable[[], str],
     ) -> None:
         self._setup_project = setup_project
         self._recorder = recorder
         self._examples = examples
         self._trainer = trainer
         self._policy = policy
+        self._tracker = tracker
+        self._serving_version = serving_version
         self._retrain_lock = threading.Lock()  # webhooks arrive on parallel threads
 
     def rejection(self, event: AnnotationEvent) -> str | None:
@@ -109,8 +120,13 @@ class IngestAnnotation:
         )
         if not decision.should_train:
             return decision
+        facts = LaunchFacts(
+            trigger=RunTrigger.RETRAIN_THRESHOLD,
+            training_set_size=training_set_size,
+            serving_version=self._serving_version(),
+        )
         try:
-            self._trainer.start()
+            self._trainer.start(tracked_as=self._tracker.record_launch(facts))
         except TrainingAlreadyActive as e:
             return RetrainDecision(False, str(e))
         return decision

@@ -12,6 +12,14 @@ class RunStatus(Enum):
     FAILED = auto()
 
 
+class RunTrigger(Enum):
+    """What launched a Training Run. Known only to whatever launched it."""
+
+    RETRAIN_THRESHOLD = "retrain-threshold"
+    START_TRAINING = "start-training"
+    COMMAND_LINE = "command-line"
+
+
 @dataclass(frozen=True)
 class TrainingRun:
     id: str

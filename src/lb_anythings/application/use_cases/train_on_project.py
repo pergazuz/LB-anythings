@@ -1,13 +1,21 @@
 """Train on the whole project: what the Start Training button does."""
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from lb_anythings.application.example_recording import ExampleRecorder
-from lb_anythings.application.ports import ExampleStore, LabelStudioProjectClient, Trainer
+from lb_anythings.application.ports import (
+    ExampleStore,
+    ExperimentTracker,
+    LabelStudioProjectClient,
+    LaunchFacts,
+    Trainer,
+)
 from lb_anythings.application.project_context import NO_CREDENTIALS, Credentials
 from lb_anythings.application.use_cases.setup_project import SetupProject
 from lb_anythings.domain.errors import ProjectExportFailed, TrainingAlreadyActive
+from lb_anythings.domain.training_run import RunTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +43,8 @@ class TrainOnProject:
         recorder: ExampleRecorder,
         examples: ExampleStore,
         trainer: Trainer,
+        tracker: ExperimentTracker,
+        serving_version: Callable[[], str],
         *,
         minimum_examples: int,
         configured_credentials: Credentials,
@@ -44,6 +54,8 @@ class TrainOnProject:
         self._recorder = recorder
         self._examples = examples
         self._trainer = trainer
+        self._tracker = tracker
+        self._serving_version = serving_version
         self._minimum = minimum_examples
         self._configured = configured_credentials
 
@@ -115,8 +127,16 @@ class TrainOnProject:
         if size < self._minimum:
             reason = f"Training Set has {size}; need at least {self._minimum}"
             return replace(counted, reason=reason)
+        facts = LaunchFacts(
+            trigger=RunTrigger.START_TRAINING,
+            training_set_size=size,
+            serving_version=self._serving_version(),
+            exported_tasks=len(exported),
+            unannotated_tasks=unannotated,
+            uncollected_tasks=not_collected,
+        )
         try:
-            self._trainer.start()
+            self._trainer.start(tracked_as=self._tracker.record_launch(facts))
         except TrainingAlreadyActive as e:
             return replace(counted, reason=str(e))
         return replace(counted, training_launched=True)

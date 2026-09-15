@@ -15,9 +15,15 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default=None, help="bind address (default: LB_HOST)")
     serve.add_argument("--port", type=int, default=None, help="port (default: LB_PORT)")
 
-    commands.add_parser(
+    train = commands.add_parser(
         "train",
         help="run one Training Run on the Training Set in this process (the server spawns this)",
+    )
+    train.add_argument(
+        "--tracked-as",
+        default=None,
+        help="the recorded run this continues; the server passes it so the launch and the "
+        "metrics land on one row",
     )
 
     mine = commands.add_parser(

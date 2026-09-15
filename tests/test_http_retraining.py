@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from lb_anythings.domain.training_run import RunTrigger
 from tests.annotations import annotation_event
 from tests.conftest import Fakes
 from tests.label_configs import PIPE
@@ -75,3 +76,36 @@ def test_negatives_and_resubmissions_do_not_move_the_training_set_toward_the_thr
     _annotate(labelling, 1)  # the same Task again
 
     assert fakes.trainer.runs == []
+
+
+def test_the_run_records_what_launched_it_and_how_much_was_labelled(
+    labelling: TestClient, fakes: Fakes
+) -> None:
+    """Quality against Training Set size is the whole reason for recording a launch."""
+    _annotate(labelling, 1)
+    labelling.post("/predict", json={"tasks": [{"id": 1, "data": {"image": "a.jpg"}}]})
+    serving = labelling.get("/health").json()["model_version"]
+
+    _annotate(labelling, 2)
+
+    (launch,) = fakes.tracker.launches
+    assert launch.trigger is RunTrigger.RETRAIN_THRESHOLD
+    assert launch.training_set_size == 2
+    assert launch.serving_version == serving  # the Checkpoint this run is trying to beat
+    assert launch.exported_tasks is None  # nothing was exported: this was not Start Training
+
+
+def test_the_training_run_continues_the_recorded_one(labelling: TestClient, fakes: Fakes) -> None:
+    """One row, not two: the metrics the run produces have to join the facts of its launch."""
+    _annotate(labelling, 1, 2)
+
+    assert fakes.trainer.tracked_as == ["recorded-run"]
+
+
+def test_a_launch_that_cannot_be_recorded_still_trains(labelling: TestClient, fakes: Fakes) -> None:
+    fakes.tracker._run_id = None
+
+    _annotate(labelling, 1, 2)
+
+    assert len(fakes.trainer.runs) == 1
+    assert fakes.trainer.tracked_as == [None]
