@@ -115,11 +115,13 @@ def training_arguments(
 ) -> dict[str, object]:
     """What ultralytics is asked to do. The only place these arguments are named.
 
-    Both paths are resolved here, for the same reason and against different directories of
-    ultralytics' own: a relative `project` is read against its runs directory, which would put
-    the Checkpoint somewhere the Detector never looks, and a relative `data` against its
-    datasets directory. `exist_ok` keeps the run name given: without it ultralytics invents
-    `<name>2` and the Detector, which looks under `<name>`, would never see the Checkpoint.
+    Both paths are resolved here as a second line of defence. `Settings` already anchors every
+    configured path at startup, so what arrives is absolute; these stay because the reason is
+    ultralytics' own and survives any caller: a relative `project` is read against its runs
+    directory, which would put the Checkpoint somewhere the Detector never looks, and a
+    relative `data` against its datasets directory. `exist_ok` keeps the run name given:
+    without it ultralytics invents `<name>2` and the Detector, which looks under `<name>`,
+    would never see the Checkpoint.
     """
     arguments: dict[str, object] = {
         "data": str(layout.description.resolve()),

@@ -170,13 +170,14 @@ directory store, which now refuses to open at all.
 Every setting is read once at startup from the environment or a `.env` file in the working
 directory. **A shell variable beats `.env`.** The effective values are logged at INFO on the
 first line of every run, with the access token masked, so you can always see what loaded.
+Paths are logged resolved, so that line says where the backend will really write.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `LB_HOST` | `0.0.0.0` | bind address |
 | `LB_PORT` | `9090` | port |
 | `LB_LOG_LEVEL` | `INFO` | log level |
-| `LB_DATA_DIR` | `data` | everything the backend writes lives here, relative to the working directory |
+| `LB_DATA_DIR` | `data` | everything the backend writes lives here; a relative path is anchored at startup to the directory you start in |
 | `LB_CHECKPOINT` | unset | a checkpoint to serve; the newer of it and the trained one wins |
 | `LB_CONF` | `0.25` | confidence floor for predictions |
 | `LB_IMGSZ` | `1024` | inference and training image size |

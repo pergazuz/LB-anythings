@@ -85,6 +85,19 @@ def checkpoint_repository(settings: Settings) -> FilesystemCheckpointRepository:
     return FilesystemCheckpointRepository(settings.trained_checkpoint, settings.checkpoint)
 
 
+def spawn_environment(settings: Settings) -> dict[str, str]:
+    """The paths a spawned Training Run must not work out for itself.
+
+    `Settings` has already resolved these against the directory the server started in. Passing
+    them means the child writes there whatever directory it inherits and whatever a `.env`
+    beside it says.
+    """
+    environment = {"LB_DATA_DIR": str(settings.data_dir)}
+    if settings.checkpoint is not None:
+        environment["LB_CHECKPOINT"] = str(settings.checkpoint)
+    return environment
+
+
 def production_ports(settings: Settings) -> Ports:
     return Ports(
         checkpoints=checkpoint_repository(settings),
@@ -100,6 +113,7 @@ def production_ports(settings: Settings) -> Ports:
             runs_dir=settings.runs_dir,
             run_name=settings.train_run_name,
             checkpoint=settings.trained_checkpoint,
+            environment=spawn_environment(settings),
         ),
         project_client=LabelStudioExportClient(),
         tracker=MlflowExperimentTracker(lambda: tracking_for(settings))
@@ -126,7 +140,7 @@ def tracking_for(settings: Settings, started_at: datetime | None = None) -> Trac
     """
     if not settings.tracking:
         return None
-    root = settings.tracking_dir.resolve()  # a relative one would follow the working directory
+    root = settings.tracking_dir  # absolute already: Settings resolves once, at startup
     stamp = (started_at or datetime.now(UTC)).strftime("%Y%m%dT%H%M%SZ")
     return TrackingConfig(
         uri=settings.tracking_uri or f"sqlite:///{(root / 'mlflow.db').as_posix()}",

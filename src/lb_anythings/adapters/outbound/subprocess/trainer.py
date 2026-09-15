@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -47,9 +47,16 @@ def detached_process_flags() -> dict[str, Any]:
 
 class SubprocessTrainer:
     def __init__(
-        self, *, command: Sequence[str], runs_dir: Path, run_name: str, checkpoint: Path
+        self,
+        *,
+        command: Sequence[str],
+        runs_dir: Path,
+        run_name: str,
+        checkpoint: Path,
+        environment: Mapping[str, str] | None = None,
     ) -> None:
         self._command = list(command)
+        self._environment = dict(environment or {})
         self._run_name = run_name
         self._record_file = runs_dir / f"{run_name}.json"
         self._log = runs_dir / f"{run_name}.log"
@@ -69,12 +76,17 @@ class SubprocessTrainer:
         # The recorded run travels as an argument, not an environment variable: it is visible
         # in the process list, and the child decides what it means.
         command = self._command + (["--tracked-as", tracked_as] if tracked_as else [])
+        # The child re-reads the settings for itself, so it is handed the paths already
+        # resolved: it must write where this process expects, not where its own directory
+        # or `.env` would put it.
+        environment = {**os.environ, **self._environment} if self._environment else None
         with self._log.open("ab") as log:
             self._process = subprocess.Popen(
                 command,
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
+                env=environment,
                 **detached_process_flags(),
             )
         try:

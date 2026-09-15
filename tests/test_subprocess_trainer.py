@@ -112,3 +112,44 @@ def test_two_callers_crossing_the_threshold_together_launch_one_run(tmp_path: Pa
         outcomes = sorted(pool.map(lambda _: attempt(), range(2)))
 
     assert outcomes == ["refused", "started"]
+
+
+def test_the_spawned_run_is_handed_the_paths_rather_than_working_them_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The child re-reads the settings, so it must not be left to resolve them itself."""
+    written = tmp_path / "seen.txt"
+    script = f"import os; open({str(written)!r}, 'w').write(os.environ['LB_DATA_DIR'])"
+    monkeypatch.chdir(tmp_path)
+    trainer = SubprocessTrainer(
+        command=[sys.executable, "-c", script],
+        runs_dir=tmp_path / "runs",
+        run_name="active",
+        checkpoint=tmp_path / "runs/active/weights/best.pt",
+        environment={"LB_DATA_DIR": str(tmp_path / "anchored")},
+    )
+
+    trainer.start()
+
+    assert _wait_until(written.exists)
+    assert written.read_text() == str(tmp_path / "anchored")
+
+
+def test_the_spawned_run_keeps_the_rest_of_the_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    written = tmp_path / "seen.txt"
+    script = f"import os; open({str(written)!r}, 'w').write(os.environ.get('LB_CONF', 'gone'))"
+    monkeypatch.setenv("LB_CONF", "0.4")
+    trainer = SubprocessTrainer(
+        command=[sys.executable, "-c", script],
+        runs_dir=tmp_path / "runs",
+        run_name="active",
+        checkpoint=tmp_path / "runs/active/weights/best.pt",
+        environment={"LB_DATA_DIR": str(tmp_path)},
+    )
+
+    trainer.start()
+
+    assert _wait_until(written.exists)
+    assert written.read_text() == "0.4"

@@ -37,7 +37,7 @@ def test_defaults_match_the_spec() -> None:
     settings = Settings()
 
     assert (settings.host, settings.port, settings.log_level) == ("0.0.0.0", 9090, "INFO")
-    assert settings.data_dir == Path("data")
+    assert settings.data_dir == Path("data").resolve()  # `data`, anchored where we started
     assert settings.label_studio_url is None
     assert settings.label_studio_api_key is None
 
@@ -70,3 +70,43 @@ def test_effective_settings_render_every_value_with_the_api_key_masked(
     assert "secret-token" not in line
     assert "port=9091" in line
     assert "label_studio_api_key=**********" in line
+
+
+def test_configured_paths_stop_following_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Training Run is spawned as its own process; a relative path would move under it."""
+    started_in = tmp_path / "here"
+    started_in.mkdir()
+    monkeypatch.chdir(started_in)
+    monkeypatch.setenv("LB_DATA_DIR", "data")
+    monkeypatch.setenv("LB_CHECKPOINT", "weights/best.pt")
+    monkeypatch.setenv("LB_MINE_OUT", "picks")
+
+    settings = Settings()
+    monkeypatch.chdir(tmp_path)  # something later runs somewhere else entirely
+
+    assert settings.data_dir == started_in / "data"
+    assert settings.checkpoint == started_in / "weights/best.pt"
+    assert settings.hard_frames_dir == started_in / "picks"
+    for derived in (
+        settings.examples_dir,
+        settings.runs_dir,
+        settings.dataset_dir,
+        settings.cache_dir,
+        settings.tracking_dir,
+        settings.trained_checkpoint,
+    ):
+        assert derived.is_absolute()
+        assert started_in in derived.parents
+
+
+def test_the_effective_settings_line_says_where_the_backend_will_really_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LB_DATA_DIR", "data")
+
+    line = render_effective_settings(Settings())
+
+    assert f"data_dir={tmp_path.resolve() / 'data'}" in line

@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from lb_anythings.adapters.outbound.yolo.training import checkpoint_path
@@ -59,6 +59,22 @@ class Settings(BaseSettings):
     label_studio_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("LABEL_STUDIO_API_KEY")
     )
+
+    @field_validator("data_dir", "checkpoint", "mine_out", mode="after")
+    @classmethod
+    def _resolved_once(cls, path: Path | None) -> Path | None:
+        """Anchor every configured path to the directory the backend was started in.
+
+        A relative path would otherwise be read against whatever directory finally uses it,
+        and that is not always this one: a Training Run is spawned as its own process, and
+        ultralytics resolves a relative path against directories of its own. Doing it here,
+        once, means nothing downstream can be misled -- and the effective-settings line says
+        where the backend will really write rather than what was typed.
+
+        `mine_video` is left alone: it is an input the Operator names on the command line,
+        read in that same process, where relative means what they expect.
+        """
+        return path.resolve() if path is not None else None
 
     # --- the data directory layout ---
     @property
