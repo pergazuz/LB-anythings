@@ -82,6 +82,17 @@ $env:LABEL_STUDIO_API_KEY = "<your access token>"   # Account & Settings -> Acce
 
 These are also what the **Start Training** button needs.
 
+Use a **personal access token** (Account & Settings → Access Token). Label Studio 1.23 disables
+legacy tokens by default, and a personal access token is a JWT: the backend exchanges it for a
+short-lived one and sends it as a bearer token. A legacy token still works on an instance that
+still allows them.
+
+Label Studio hands the backend its own credentials at setup and those are preferred, but 1.23
+sends a *legacy* token even when legacy tokens are disabled — and then rejects it. When that
+happens the backend falls back to the token you configured here, for the same host only, and
+says so in the log. Without `LABEL_STUDIO_API_KEY` set there is nothing to fall back to and
+images will not load.
+
 The labeling interface must have exactly one `RectangleLabels` control bound to exactly one
 `Image`. Any tag names work; the backend reads them from the config.
 

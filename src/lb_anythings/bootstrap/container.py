@@ -115,7 +115,7 @@ def production_ports(settings: Settings) -> Ports:
             checkpoint=settings.trained_checkpoint,
             environment=spawn_environment(settings),
         ),
-        project_client=LabelStudioExportClient(),
+        project_client=LabelStudioExportClient(defaults=configured_credentials(settings)),
         tracker=MlflowExperimentTracker(lambda: tracking_for(settings))
         if settings.tracking
         else NullExperimentTracker(),

@@ -31,6 +31,26 @@ class Credentials:
         borrowable = configured.hostname and same_host(self.hostname, configured.hostname)
         return Credentials(self.hostname, configured.access_token if borrowable else None)
 
+    def candidates_against(self, configured: "Credentials") -> tuple["Credentials", ...]:
+        """Every credential worth trying for this host, best first.
+
+        Setup's credentials still win, but they are not always usable: Label Studio 1.23 hands
+        an ML backend a legacy token even when the instance has legacy tokens disabled, and
+        then rejects it. So the configured token is a fallback -- for the same host only, which
+        is the same rule that stops it travelling to a host setup introduced.
+        """
+        primary = self.resolved_against(configured)
+        interchangeable = (
+            configured.access_token
+            and configured.access_token != primary.access_token
+            and primary.hostname
+            and configured.hostname
+            and same_host(primary.hostname, configured.hostname)
+        )
+        if not interchangeable:
+            return (primary,)
+        return (primary, Credentials(primary.hostname, configured.access_token))
+
 
 NO_CREDENTIALS = Credentials()
 

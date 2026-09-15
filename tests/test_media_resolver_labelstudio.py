@@ -163,3 +163,50 @@ def test_the_same_path_on_a_new_hostname_is_fetched_again(
         "http://ls-from-setup:8080/data/upload/3/abc.jpg",
         "http://another-ls:8080/data/upload/3/abc.jpg",
     ]
+
+
+class RefusesItsOwnToken:
+    """Label Studio 1.23 hands out a legacy token and then rejects it with 401."""
+
+    def __init__(self, png: bytes, accepted: str) -> None:
+        self.png, self.accepted = png, accepted
+        self.auth_headers: list[str | None] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        header = request.headers.get("Authorization")
+        self.auth_headers.append(header)
+        if header == f"Token {self.accepted}":
+            return httpx.Response(200, content=self.png)
+        return httpx.Response(401, text="Invalid token")
+
+
+def test_a_token_label_studio_refuses_falls_back_to_the_configured_one(
+    tmp_path: Path, png: bytes
+) -> None:
+    """Verified against a real Label Studio 1.23: setup hands over a token it then rejects."""
+    handler = RefusesItsOwnToken(png, accepted="cfg-token")
+    resolver = LabelStudioMediaResolver(
+        httpx.Client(transport=httpx.MockTransport(handler)),
+        cache_dir=tmp_path / "cache",
+        defaults=Credentials(hostname="http://ls-from-setup:8080", access_token="cfg-token"),
+    )
+
+    resolver.load(UPLOAD, SETUP)
+
+    assert handler.auth_headers == ["Token setup-token", "Token cfg-token"]
+
+
+def test_the_configured_token_is_not_tried_for_a_host_setup_introduced(
+    tmp_path: Path, png: bytes
+) -> None:
+    handler = RefusesItsOwnToken(png, accepted="cfg-token")
+    resolver = LabelStudioMediaResolver(
+        httpx.Client(transport=httpx.MockTransport(handler)),
+        cache_dir=tmp_path / "cache",
+        defaults=CONFIGURED,
+    )
+
+    with pytest.raises(MediaUnavailable):
+        resolver.load(UPLOAD, SETUP)
+
+    assert handler.auth_headers == ["Token setup-token"]  # never offered elsewhere
