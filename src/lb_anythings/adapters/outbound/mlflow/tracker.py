@@ -7,6 +7,7 @@ row because the launcher hands the recorded run's id down, and MLflow resumes a 
 """
 
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +51,9 @@ def ensure_experiment(tracking: TrackingConfig) -> bool:
     Training Run was spawned in -- the same trap as ultralytics' relative `project`. Creation is
     the one moment the location can be set. False when MLflow is not installed.
     """
+    # Set before the import, which is when MLflow decides whether to print it: a notice aimed
+    # at coding agents has no business in the log an Operator is told to read.
+    os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
     try:
         import mlflow  # deferred: the tracking dependency group is optional
     except ImportError:
