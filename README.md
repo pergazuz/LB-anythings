@@ -61,10 +61,24 @@ finds or creates the Label Studio project, connects this backend to it as a mode
 Ctrl+C stops what `up` started; anything already running is left alone.
 ```
 
-Label Studio has to be installed for `up` to start it -- `uv tool install label-studio`, or
-`pip install label-studio` -- or you can point `LB_LABEL_STUDIO_COMMAND` at however you start
-yours. To wire the project, `up` also needs `LABEL_STUDIO_API_KEY` (below). Without it the
-three still come up and the command tells you what to do next.
+Label Studio has to be installed for `up` to start it:
+
+```powershell
+uv tool install --python 3.13 label-studio
+```
+
+**Pin the Python version.** Label Studio 1.23 does not run on Python 3.14 -- one of its
+dependencies imports `pkgutil.find_loader`, which 3.14 removed -- and `uv tool install` picks
+the newest Python it can find. The failure is an `ImportError` traceback from `environ` before
+Label Studio prints anything of its own. `uv tool install --python 3.13 --force label-studio`
+fixes an install that already went that way.
+
+Or point `LB_LABEL_STUDIO_COMMAND` at however you start yours. To wire the project, `up` also
+needs `LABEL_STUDIO_API_KEY` (below). Without it the three still come up and the command tells
+you what to do next.
+
+When a service dies on the way up, `up` stops the rest and says which one it was; the whole of
+what it printed is in `data\logs\<name>.log`.
 
 Anything already answering is **adopted**, not started, and is left running when `up` stops. So
 `up` beside a Label Studio you started yourself works, and running it twice is harmless.
@@ -75,6 +89,13 @@ uv run lb-anythings up --project 1            # wire this project, whatever it i
 uv run lb-anythings up --new --title "Valves" --label valve --label flange
 uv run lb-anythings up --no-label-studio      # beside one you run yourself
 uv run lb-anythings up --no-wiring            # start the three, change nothing in Label Studio
+```
+
+**Already have a project?** With no flags `up` looks for one titled `LB-anythings` and creates
+it if there is none, so point it at yours once, in `.env`:
+
+```
+LB_PROJECT_TITLE=pipe_detection      # ...or LB_PROJECT=1, by id
 ```
 
 A created project gets a labeling config built from your training set's `classes.txt`, or from

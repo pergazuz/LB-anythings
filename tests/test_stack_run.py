@@ -164,7 +164,9 @@ def test_a_stack_that_will_not_come_up_fails_without_a_traceback(
     code, printed, _ = _run(bring_up=refuses)
 
     assert code == 1
-    assert "label-studio did not answer" in capsys.readouterr().err
+    reported = capsys.readouterr().err
+    assert "label-studio did not answer" in reported
+    assert "logs" in reported, "the reason is in the Service's log; say where that is"
     assert printed == []
 
 

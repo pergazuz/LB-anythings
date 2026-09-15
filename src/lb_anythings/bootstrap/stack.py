@@ -236,7 +236,11 @@ def run_stack(
     bring_up = bring_up or stack_bringer(settings, echo=None if options.quiet else out)
     try:
         stack = bring_up(stack_plan(settings, options))
-    except (ServiceDidNotStart, ProjectWiringFailed) as e:
+    except ServiceDidNotStart as e:
+        print(f"cannot bring the Stack up: {e}", file=sys.stderr)
+        print(f"what each Service printed is in {settings.logs_dir}", file=sys.stderr)
+        return 1
+    except ProjectWiringFailed as e:
         print(f"cannot bring the Stack up: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
