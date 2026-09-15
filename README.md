@@ -15,9 +15,9 @@ Label Studio, and reads that project's existing examples without conversion.
 - **Collects.** Every annotation submitted or updated becomes a training example on disk.
   Cancelled and skipped annotations are dropped; one with no boxes is kept, as a negative
   example, but does not count toward the retrain threshold.
-- **Retrains.** Whenever the training set reaches a multiple of 25 examples (configurable), a
-  training run starts on its own, and the next prediction uses the checkpoint it produced. No
-  restart.
+- **Retrains.** When the training set has grown enough since the last run, a training run
+  starts on its own and the next prediction uses the checkpoint it produced. No restart.
+  "Enough" scales: 25 new examples while the set is small, 10% of it once it is large.
 - **Trains on demand.** The Start Training button pulls every annotated task from the project
   and trains on all of them, including annotations made before the backend was connected.
 - **Mines.** `lb-anythings mine` finds the frames of a video the detector is least sure about,
@@ -167,6 +167,26 @@ LLM calls and has nothing to do with training. The numbers you want are the run'
 open a run and look at **Overview → Metrics**, or use the experiment's **Chart** view to
 compare runs.
 
+### How often it retrains
+
+The threshold is a floor, not the whole rule. A run starts when the training set has grown,
+since the last run, by `LB_RETRAIN_EVERY` examples **or** by `LB_RETRAIN_GROWTH` of its own
+size — whichever is larger:
+
+| Training set | Next run at | Step |
+|---|---|---|
+| 50 | 75 | 25 (the floor) |
+| 250 | 275 | 25 (the floor) |
+| 500 | 550 | 50 |
+| 1000 | 1100 | 100 |
+| 5000 | 5500 | 500 |
+
+Accuracy improves as a power law in the number of examples, so equal *relative* growth buys
+roughly equal accuracy while equal *absolute* growth buys less and less. Twenty-five more
+examples doubles a set of 25 and is a rounding error on a set of 1000, but costs the same GPU
+minutes either way. `LB_RETRAIN_GROWTH=0` gives you a fixed step back. The reasoning and the
+sources are in [ADR 0004](docs/adr/0004-the-retrain-threshold-grows-with-the-training-set.md).
+
 `training_set_size` is the one to plot against. Detector quality on its own says little; mAP
 against how much you have labelled is what tells you whether labelling is still paying off, or
 whether the curve has flattened and your time is better spent elsewhere. Both halves land on
@@ -204,7 +224,8 @@ Paths are logged resolved, so that line says where the backend will really write
 | `LB_CONF` | `0.25` | confidence floor for predictions |
 | `LB_IMGSZ` | `1024` | inference and training image size |
 | `LB_TRAIN_RUN_NAME` | `active` | name of the training run's output folder |
-| `LB_RETRAIN_EVERY` | `25` | retrain threshold: train every N examples |
+| `LB_RETRAIN_EVERY` | `25` | retrain threshold: fewest new examples worth a run |
+| `LB_RETRAIN_GROWTH` | `0.10` | ...and never on less than this share of the training set |
 | `LB_MIN_EXAMPLES` | `4` | never train on fewer than this |
 | `LB_TRAIN_BASE_MODEL` | `yolo11s.pt` | base checkpoint to train from |
 | `LB_TRAIN_EPOCHS` | `100` | epochs |
@@ -258,9 +279,9 @@ New-Item -ItemType Directory -Force "$data\runs\active\weights" | Out-Null
 Copy-Item -Force "<old repo>\runs\pipe_ls\weights\best.pt" "$data\runs\active\weights\best.pt"
 ```
 
-The examples you bring across count. The threshold fires when the training set *size* is a
-multiple of `LB_RETRAIN_EVERY`, rather than 25 after the last run, so migrating 333 examples
-puts the next automatic run at 350, not at 358.
+The examples you bring across count, and they train immediately: with no previous run to
+measure growth against, the first training run starts as soon as `LB_MIN_EXAMPLES` is met
+rather than waiting for more annotations.
 
 The old layout is read as-is: the same `task<id>` file names and the same normalized lines.
 The only new file is `classes.txt`, which names the classes the label indices refer to.

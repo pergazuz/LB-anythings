@@ -116,6 +116,7 @@ class IngestAnnotation:
         decision = decide_retrain(
             self._policy,
             training_set_size=training_set_size,
+            trained_at_size=self._trainer.trained_at_size(),
             run_active=lambda: self._trainer.active() is not None,
         )
         if not decision.should_train:
@@ -126,7 +127,10 @@ class IngestAnnotation:
             serving_version=self._serving_version(),
         )
         try:
-            self._trainer.start(tracked_as=self._tracker.record_launch(facts))
+            self._trainer.start(
+                tracked_as=self._tracker.record_launch(facts),
+                training_set_size=training_set_size,
+            )
         except TrainingAlreadyActive as e:
             return RetrainDecision(False, str(e))
         return decision

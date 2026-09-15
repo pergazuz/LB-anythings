@@ -99,14 +99,22 @@ class FakeTrainer:
     def __init__(self) -> None:
         self.runs: list[TrainingRun] = []
         self.tracked_as: list[str | None] = []  # what each run was told to continue
+        self.sizes: list[int] = []  # the Training Set size each run launched on
         self._status: dict[str, RunStatus] = {}
 
-    def start(self, tracked_as: str | None = None) -> TrainingRun:
+    def trained_at_size(self) -> int | None:
+        return self.sizes[-1] if self.sizes else None
+
+    def start(
+        self, tracked_as: str | None = None, training_set_size: int | None = None
+    ) -> TrainingRun:
         if self.active() is not None:
             raise TrainingAlreadyActive("a Training Run is already active")
         run = TrainingRun(f"run{len(self.runs) + 1}", float(len(self.runs) + 1), RunStatus.RUNNING)
         self.runs.append(run)
         self.tracked_as.append(tracked_as)
+        if training_set_size is not None:
+            self.sizes.append(training_set_size)
         self._status[run.id] = RunStatus.RUNNING
         return run
 

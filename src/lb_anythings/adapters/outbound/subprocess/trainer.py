@@ -37,6 +37,17 @@ class RunRecord:
     pid: int
     created_at: float  # the process's own creation time, to recognise a reused pid
     started_at: float
+    training_set_size: int | None = None  # the baseline the next retrain decision grows from
+
+
+def _optional_int(raw: object) -> int | None:
+    """A record written before the baseline existed simply has none."""
+    if not isinstance(raw, int | float | str):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def detached_process_flags() -> dict[str, Any]:
@@ -64,11 +75,17 @@ class SubprocessTrainer:
         self._process: subprocess.Popen[bytes] | None = None
         self._start_lock = threading.Lock()
 
-    def start(self, tracked_as: str | None = None) -> TrainingRun:
+    def start(
+        self, tracked_as: str | None = None, training_set_size: int | None = None
+    ) -> TrainingRun:
         with self._start_lock:  # two callers crossing a threshold together launch one run
-            return self._start(tracked_as)
+            return self._start(tracked_as, training_set_size)
 
-    def _start(self, tracked_as: str | None) -> TrainingRun:
+    def trained_at_size(self) -> int | None:
+        record = self._read()
+        return record.training_set_size if record else None
+
+    def _start(self, tracked_as: str | None, training_set_size: int | None) -> TrainingRun:
         if self.active() is not None:
             raise TrainingAlreadyActive("a Training Run is already active; wait for it to finish")
         self._record_file.parent.mkdir(parents=True, exist_ok=True)
@@ -95,7 +112,16 @@ class SubprocessTrainer:
             logger.debug("could not read the creation time of pid %s", self._process.pid)
             created_at = started_at
         run = TrainingRun(uuid.uuid4().hex, started_at, RunStatus.RUNNING)
-        self._write(RunRecord(run.id, self._run_name, self._process.pid, created_at, started_at))
+        self._write(
+            RunRecord(
+                run.id,
+                self._run_name,
+                self._process.pid,
+                created_at,
+                started_at,
+                training_set_size,
+            )
+        )
         logger.info("started Training Run %s as pid %s", run.id, self._process.pid)
         return run
 
@@ -145,6 +171,7 @@ class SubprocessTrainer:
                 pid=int(raw["pid"]),
                 created_at=float(raw["created_at"]),
                 started_at=float(raw["started_at"]),
+                training_set_size=_optional_int(raw.get("training_set_size")),
             )
         except (OSError, ValueError, KeyError, TypeError):
             logger.warning("run record %s is unreadable; treating it as no run", self._record_file)

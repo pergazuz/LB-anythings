@@ -136,7 +136,9 @@ class TrainOnProject:
             uncollected_tasks=not_collected,
         )
         try:
-            self._trainer.start(tracked_as=self._tracker.record_launch(facts))
+            self._trainer.start(
+                tracked_as=self._tracker.record_launch(facts), training_set_size=size
+            )
         except TrainingAlreadyActive as e:
             return replace(counted, reason=str(e))
         return replace(counted, training_launched=True)

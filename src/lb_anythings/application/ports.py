@@ -104,12 +104,20 @@ class ExperimentTracker(Protocol):
 class Trainer(Protocol):
     """Runs Training Runs. At most one is active at a time."""
 
-    def start(self, tracked_as: str | None = None) -> TrainingRun:
+    def start(
+        self, tracked_as: str | None = None, training_set_size: int | None = None
+    ) -> TrainingRun:
         """Launch a Training Run, or raise TrainingAlreadyActive.
 
         `tracked_as` is the recorded run it continues, so the launch facts and the metrics the
-        run itself produces end up on one row rather than two.
+        run itself produces end up on one row rather than two. `training_set_size` is how many
+        Examples it is training on, kept as the baseline the next retrain decision measures
+        growth against.
         """
+        ...
+
+    def trained_at_size(self) -> int | None:
+        """The Training Set size the last Training Run launched on, or None if none has."""
         ...
 
     def active(self) -> TrainingRun | None:

@@ -55,17 +55,29 @@ def test_no_second_run_starts_while_one_is_active(labelling: TestClient, fakes: 
     assert fakes.trainer.active() is not None
 
 
-def test_the_next_multiple_starts_a_run_once_the_previous_finished(
+def test_a_trigger_refused_because_a_run_was_active_is_not_lost(
     labelling: TestClient, fakes: Fakes
 ) -> None:
-    _annotate(labelling, 1, 2, 3, 4)  # 4 was refused: run 1 active
-    fakes.trainer.finish(fakes.trainer.runs[0], succeeded=True)
-
-    _annotate(labelling, 5)
+    """The old rule fired only on an exact multiple, so a busy moment cost a whole cycle."""
+    _annotate(labelling, 1, 2)  # run 1 launches on a Training Set of 2
+    _annotate(labelling, 3, 4)  # 4 has grown enough, but run 1 is still going
     assert len(fakes.trainer.runs) == 1
-    _annotate(labelling, 6)
+
+    fakes.trainer.finish(fakes.trainer.runs[0], succeeded=True)
+    _annotate(labelling, 5)  # the very next Annotation tries again
 
     assert len(fakes.trainer.runs) == 2
+
+
+def test_each_run_records_the_training_set_it_launched_on(
+    labelling: TestClient, fakes: Fakes
+) -> None:
+    """That size is the baseline the next decision measures growth against."""
+    _annotate(labelling, 1, 2)
+    fakes.trainer.finish(fakes.trainer.runs[0], succeeded=True)
+    _annotate(labelling, 3, 4)
+
+    assert fakes.trainer.sizes == [2, 4]
 
 
 def test_negatives_and_resubmissions_do_not_move_the_training_set_toward_the_threshold(

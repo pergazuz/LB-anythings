@@ -28,7 +28,8 @@ class Settings(BaseSettings):
 
     # Training Runs
     train_run_name: str = "active"
-    retrain_every: int = Field(default=25, ge=1)  # the Retrain Threshold
+    retrain_every: int = Field(default=25, ge=1)  # the Retrain Threshold: the floor
+    retrain_growth: float = Field(default=0.10, ge=0.0)  # ...and this share of the Training Set
     min_examples: int = Field(default=4, ge=1)
     train_base_model: str = "yolo11s.pt"
     train_epochs: int = 100

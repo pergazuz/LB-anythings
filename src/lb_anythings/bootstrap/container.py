@@ -233,7 +233,11 @@ def build_app(settings: Settings, ports: Ports | None = None) -> FastAPI:
             recorder,
             ports.examples,
             ports.trainer,
-            RetrainPolicy(threshold=settings.retrain_every, minimum=settings.min_examples),
+            RetrainPolicy(
+                threshold=settings.retrain_every,
+                minimum=settings.min_examples,
+                growth=settings.retrain_growth,
+            ),
             ports.tracker,
             lambda: detector_cache.serving_version,
         ),

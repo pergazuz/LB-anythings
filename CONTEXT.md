@@ -75,10 +75,11 @@ is active at a time.
 _Avoid_: fit, job, training session
 
 **Retrain Threshold**:
-The Training Set size at whose every multiple a Training Run starts on its own. It is
-a property of the size, not of the growth since the last run: with a threshold of 25,
-a Training Set of 333 migrated Examples next trains at 350.
-_Avoid_: train_every, batch size
+The fewest new Examples worth a Training Run. It is a floor, not the whole rule: the
+Training Set must grow since the last run by the threshold *or* by a share of its own
+size, whichever is larger, so retraining is frequent while the set is small and rare
+once it is large (ADR 0004).
+_Avoid_: train_every, batch size, interval
 
 **Run Trigger**:
 What launched a Training Run: the Retrain Threshold, the Start Training button, or the
