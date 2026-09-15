@@ -54,5 +54,10 @@ class Box:
             self.y2 - self.y1,
         )
 
+    @property
+    def area(self) -> float:
+        """The fraction of its image this box covers."""
+        return (self.x2 - self.x1) * (self.y2 - self.y1)
+
     def coordinates(self) -> tuple[float, float, float, float]:
         return (self.x1, self.y1, self.x2, self.y2)

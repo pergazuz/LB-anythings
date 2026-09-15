@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     train_lr0: float | None = None
     device: str = "0"
 
+    # Mining Hard Frames
+    mine_video: Path | None = None
+    mine_stride: int = Field(default=15, ge=1)
+    mine_topn: int = Field(default=40, ge=1)
+    mine_gap: int = Field(default=60, ge=0)
+    mine_uncertain_lo: float = 0.25
+    mine_uncertain_hi: float = 0.55
+    mine_conf: float = 0.15
+    mine_out: Path | None = None  # default: <data dir>/hard_frames
+
     # Label Studio's own names, unprefixed. HOSTNAME is the previous backend's name for URL.
     label_studio_url: str | None = Field(
         default=None, validation_alias=AliasChoices("LABEL_STUDIO_URL", "LABEL_STUDIO_HOSTNAME")
@@ -61,6 +71,10 @@ class Settings(BaseSettings):
     @property
     def cache_dir(self) -> Path:
         return self.data_dir / "cache"
+
+    @property
+    def hard_frames_dir(self) -> Path:
+        return self.mine_out or self.data_dir / "hard_frames"
 
     @property
     def trained_checkpoint(self) -> Path:

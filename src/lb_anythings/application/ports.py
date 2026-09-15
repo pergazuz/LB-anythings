@@ -1,6 +1,6 @@
 """Outbound ports: everything the application needs from the world, as Protocols."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -96,4 +96,24 @@ class LabelStudioProjectClient(Protocol):
 
         Raises ProjectExportFailed when Label Studio does not hand the tasks over.
         """
+        ...
+
+
+class FrameSource(Protocol):
+    """A video opened for mining: its length, its size, and its frames."""
+
+    @property
+    def frame_count(self) -> int: ...
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """Width and height in pixels."""
+        ...
+
+    def frames(self, stride: int) -> Iterator[tuple[int, Image]]:
+        """Every `stride`-th frame with its index, from the start."""
+        ...
+
+    def frame_at(self, index: int) -> Image | None:
+        """One frame by index, or None when it cannot be read."""
         ...

@@ -19,3 +19,7 @@ class NotEnoughExamples(ValueError):
 
 class ProjectExportFailed(RuntimeError):
     """Label Studio did not hand over the project's tasks."""
+
+
+class NoCheckpointAvailable(RuntimeError):
+    """There is no Checkpoint to work from: nothing has been trained and none is configured."""

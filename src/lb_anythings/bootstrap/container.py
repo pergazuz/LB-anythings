@@ -1,7 +1,9 @@
 """Composition root: wires settings and adapters into the application."""
 
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -11,6 +13,7 @@ from lb_anythings.adapters.outbound.filesystem.checkpoints import FilesystemChec
 from lb_anythings.adapters.outbound.filesystem.examples import FilesystemExampleStore
 from lb_anythings.adapters.outbound.labelstudio.media import LabelStudioMediaResolver
 from lb_anythings.adapters.outbound.labelstudio.project import LabelStudioExportClient
+from lb_anythings.adapters.outbound.opencv.frames import OpenCvFrameSource, write_frames
 from lb_anythings.adapters.outbound.subprocess.trainer import SubprocessTrainer
 from lb_anythings.adapters.outbound.yolo.detector import YoloDetectorFactory
 from lb_anythings.adapters.outbound.yolo.training import (
@@ -31,11 +34,17 @@ from lb_anythings.application.ports import (
 )
 from lb_anythings.application.project_context import Credentials, ProjectContextHolder
 from lb_anythings.application.use_cases.ingest_annotation import IngestAnnotation
+from lb_anythings.application.use_cases.mine_hard_frames import (
+    MineHardFrames,
+    MiningParameters,
+    MiningProgress,
+)
 from lb_anythings.application.use_cases.predict_tasks import PredictTasks
 from lb_anythings.application.use_cases.report_status import ReportStatus
 from lb_anythings.application.use_cases.setup_project import SetupProject
 from lb_anythings.application.use_cases.train_on_project import TrainOnProject
 from lb_anythings.bootstrap.settings import Settings
+from lb_anythings.domain.errors import NoCheckpointAvailable
 from lb_anythings.domain.retraining import RetrainPolicy
 
 
@@ -61,11 +70,14 @@ def configured_credentials(settings: Settings) -> Credentials:
     )
 
 
+def checkpoint_repository(settings: Settings) -> FilesystemCheckpointRepository:
+    """Where every Detector looks for its Checkpoint: the trained one, else the configured."""
+    return FilesystemCheckpointRepository(settings.trained_checkpoint, settings.checkpoint)
+
+
 def production_ports(settings: Settings) -> Ports:
     return Ports(
-        checkpoints=FilesystemCheckpointRepository(
-            settings.trained_checkpoint, settings.checkpoint
-        ),
+        checkpoints=checkpoint_repository(settings),
         detector_factory=YoloDetectorFactory(conf=settings.conf, imgsz=settings.imgsz),
         media=LabelStudioMediaResolver(
             cache_dir=settings.cache_dir, defaults=configured_credentials(settings)
@@ -103,6 +115,26 @@ def train_with_yolo(settings: Settings) -> TrainingReport:
             min_examples=settings.min_examples,
         ),
     )
+
+
+def mine_with_yolo(
+    settings: Settings,
+    video: Path,
+    parameters: MiningParameters,
+    on_progress: Callable[[MiningProgress], None] = lambda _: None,
+) -> list[Path]:
+    """Mine a video for Hard Frames and write them: what `lb-anythings mine` does."""
+    checkpoint = checkpoint_repository(settings).latest()
+    if checkpoint is None:
+        raise NoCheckpointAvailable(
+            "nothing to mine with: train a Checkpoint first, or point LB_CHECKPOINT at one"
+        )
+    # A lower confidence floor than Predictions use: mining is interested in borderline boxes.
+    detector = YoloDetectorFactory(conf=settings.mine_conf, imgsz=settings.imgsz).load(checkpoint)
+    miner = MineHardFrames(detector, on_progress)
+    with OpenCvFrameSource(video) as source:
+        picks = miner(source, parameters)
+    return write_frames(picks, settings.hard_frames_dir)
 
 
 def build_app(settings: Settings, ports: Ports | None = None) -> FastAPI:

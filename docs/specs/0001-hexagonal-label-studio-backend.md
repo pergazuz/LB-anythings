@@ -357,7 +357,9 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   refreshing its status), and the list of known versions.
 - MineHardFrames(parameters): iterates the FrameSource at the stride, detects with
   the confidence floor, scores each frame, selects the picks, and returns them with
-  their images. The CLI adapter writes the files.
+  their images, and reports progress as it scans. The OpenCV adapter writes the
+  files, called from the composition root: an inbound adapter may not reach an
+  outbound one.
 
 ### HTTP contract (unchanged from the previous backend, Label Studio compatible)
 
@@ -485,15 +487,17 @@ bounding-box project by pointing it at a different Checkpoint and data directory
 
 ### Mining (OpenCV adapter and CLI)
 
-- The FrameSource wraps OpenCV video capture. The CLI prints progress every 200
-  sampled frames and a final summary line, and writes the picks.
+- The FrameSource wraps OpenCV video capture, reading forward and keeping every
+  `stride`-th frame rather than seeking to each. The CLI prints progress every 200
+  frames scored, counted against the number the stride will score rather than the
+  video's whole length, and a final summary line naming the output folder.
 
 ### Logging and errors
 
 - Standard-library logging, one logger per adapter and one for the application.
 - Domain and application errors are typed: `InvalidLabelConfig`,
   `MediaUnavailable`, `TrainingAlreadyActive`, `NotEnoughExamples`,
-  `ProjectExportFailed`. The HTTP adapter maps `InvalidLabelConfig` to 400;
+  `ProjectExportFailed`, `NoCheckpointAvailable`. The HTTP adapter maps `InvalidLabelConfig` to 400;
   prediction failures are isolated per Task; webhook work runs in the background and
   its outcome, success or failure, is logged, never returned. A webhook that cannot
   proceed at all (no project context, missing credentials, no project id) is refused
