@@ -1,4 +1,5 @@
-"""Contract of the trainer's layout builder: the Training Set becomes a fresh train/val layout."""
+"""Contract of the trainer: the Training Set becomes a fresh train/val layout, and what
+ultralytics is then asked to do with it."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -9,10 +10,13 @@ import yaml
 from lb_anythings.adapters.outbound.yolo.training import (
     ExampleFiles,
     TrainingConfig,
+    TrainingLayout,
     build_training_layout,
+    checkpoint_path,
     split_for_training,
     training_arguments,
 )
+from lb_anythings.bootstrap.settings import Settings
 from lb_anythings.domain.errors import NotEnoughExamples
 
 
@@ -108,23 +112,46 @@ CONFIG = TrainingConfig(
 )
 
 
+def _layout(root: Path) -> TrainingLayout:
+    return TrainingLayout(root, root / "data.yaml", 3, 1)
+
+
 def test_the_run_output_path_is_absolute(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # ultralytics reads a relative `project` against its own runs directory, which would put
-    # the Checkpoint where the Detector never looks.
     monkeypatch.chdir(tmp_path)
-    layout = build_training_layout(
-        _files(tmp_path / "examples", 4), ["pipe"], Path("dataset"), minimum=4
+
+    arguments = training_arguments(_layout(Path("dataset")), Path("data/runs"), CONFIG)
+
+    assert Path(str(arguments["project"])) == (tmp_path / "data/runs").resolve()
+    assert Path(str(arguments["data"])) == (tmp_path / "dataset/data.yaml").resolve()
+
+
+def test_the_checkpoint_lands_where_the_detector_looks_for_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The two halves of the bug: what ultralytics is told, and where the Detector reads."""
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(data_dir=Path("data"), train_run_name="active")
+
+    arguments = training_arguments(
+        _layout(settings.dataset_dir),
+        settings.runs_dir,
+        replace(CONFIG, run_name=settings.train_run_name),
     )
 
-    arguments = training_arguments(layout, Path("data/runs"), CONFIG)
+    written = checkpoint_path(Path(str(arguments["project"])), settings.train_run_name)
+    assert written == settings.trained_checkpoint.resolve()
 
-    assert Path(str(arguments["project"])).is_absolute()
-    assert Path(str(arguments["project"])) == (tmp_path / "data/runs").resolve()
-    assert Path(str(arguments["data"])).is_absolute()
+
+def test_the_run_name_is_kept_and_the_data_loader_does_not_fork(tmp_path: Path) -> None:
+    arguments = training_arguments(_layout(tmp_path), tmp_path, CONFIG)
+
+    assert arguments["name"] == "active"
+    assert arguments["exist_ok"] is True  # or ultralytics writes `active2` and the Detector misses
+    assert arguments["workers"] == 0  # Windows cannot fork data-loader workers
 
 
 def test_an_optional_learning_rate_is_passed_only_when_set(tmp_path: Path) -> None:
-    layout = build_training_layout(_files(tmp_path, 4), ["pipe"], tmp_path / "d", minimum=4)
+    layout = _layout(tmp_path)
 
     assert "lr0" not in training_arguments(layout, tmp_path, CONFIG)
     assert training_arguments(layout, tmp_path, replace(CONFIG, lr0=0.005))["lr0"] == 0.005

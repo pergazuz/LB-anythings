@@ -13,8 +13,11 @@ Label Studio, and reads that project's existing examples without conversion.
 - **Predicts.** Opening a task shows the detector's boxes, already carrying your project's
   label, for an annotator to correct rather than draw.
 - **Collects.** Every annotation submitted or updated becomes a training example on disk.
-- **Retrains.** Every 25 new examples (configurable), a training run starts on its own, and
-  the next prediction uses the checkpoint it produced. No restart.
+  Cancelled and skipped annotations are dropped; one with no boxes is kept, as a negative
+  example, but does not count toward the retrain threshold.
+- **Retrains.** Whenever the training set reaches a multiple of 25 examples (configurable), a
+  training run starts on its own, and the next prediction uses the checkpoint it produced. No
+  restart.
 - **Trains on demand.** The Start Training button pulls every annotated task from the project
   and trains on all of them, including annotations made before the backend was connected.
 - **Mines.** `lb-anythings mine` finds the frames of a video the detector is least sure about,
@@ -57,8 +60,13 @@ In the project, **Settings → Model → Connect Model**:
   container.
 - **Authentication:** No Authentication
 - **Interactive preannotations:** on, if you want predictions while labelling.
+- **Start model training on annotation submission:** on. This is the toggle that makes Label
+  Studio send the annotation events. With it off nothing is collected and nothing ever
+  retrains, however many tasks you label.
 
 **Validate and Save** calls `GET /health` then `POST /setup`. Open a task and the boxes appear.
+The model card that appears under **Settings → Model** is also where the **Start Training**
+button lives.
 
 For the backend to fetch images you uploaded to Label Studio, it needs to reach Label Studio
 back. Label Studio sends a hostname and access token with most requests; when it does not, set
@@ -92,27 +100,46 @@ uv run lb-anythings mine [--video V] [...]        # write the hardest frames of 
 ```
 
 `train` is also what the server spawns for you when the retrain threshold trips or you press
-Start Training. Run it by hand to retrain on demand.
+Start Training: it *is* the training run, so it does not itself check whether another one is
+going. Run it by hand to retrain on demand, but check `GET /is_training` first: starting one
+on top of a run the server launched double-books the GPU, and both write the same checkpoint.
+
+### Mining
+
+`mine` needs a checkpoint: it asks the current detector what it is unsure about, so with none
+yet there is nothing to ask, and it says so and stops. It scores every `LB_MINE_STRIDE`-th
+frame, keeps the `LB_MINE_TOPN` most uncertain, spreads the picks at least `LB_MINE_GAP` frames
+apart, and writes them as `hard_<frame index>_s<score>.jpg` so a labelled frame is traceable
+back to the video:
+
+```powershell
+$env:LB_MINE_VIDEO = "C:\path\to\clip.mov"
+uv run lb-anythings mine
+# wrote 40 Hard Frames -> data\hard_frames
+```
+
+Then import `data\hard_frames` into Label Studio as a new set of tasks and label those next.
+That is the point of it: they are the frames the detector is worst at.
 
 ## Settings
 
 Every setting is read once at startup from the environment or a `.env` file in the working
-directory. **A shell variable beats `.env`.** The effective values are logged on the first
-line of every run, with the access token masked, so you can always see what actually loaded.
+directory. **A shell variable beats `.env`.** The effective values are logged at INFO on the
+first line of every run, with the access token masked, so you can always see what loaded.
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `LB_HOST` | `0.0.0.0` | bind address |
 | `LB_PORT` | `9090` | port |
 | `LB_LOG_LEVEL` | `INFO` | log level |
-| `LB_DATA_DIR` | `data` | everything the backend writes lives here |
+| `LB_DATA_DIR` | `data` | everything the backend writes lives here, relative to the working directory |
 | `LB_CHECKPOINT` | unset | a checkpoint to serve; the newer of it and the trained one wins |
 | `LB_CONF` | `0.25` | confidence floor for predictions |
 | `LB_IMGSZ` | `1024` | inference and training image size |
 | `LB_TRAIN_RUN_NAME` | `active` | name of the training run's output folder |
 | `LB_RETRAIN_EVERY` | `25` | retrain threshold: train every N examples |
 | `LB_MIN_EXAMPLES` | `4` | never train on fewer than this |
-| `LB_TRAIN_BASE_MODEL` | `yolo11s.pt` | base weights to train from |
+| `LB_TRAIN_BASE_MODEL` | `yolo11s.pt` | base checkpoint to train from |
 | `LB_TRAIN_EPOCHS` | `100` | epochs |
 | `LB_TRAIN_PATIENCE` | `30` | early-stop patience |
 | `LB_TRAIN_BATCH` | `8` | batch size |
@@ -133,7 +160,9 @@ Under the data directory:
 
 ```
 data/
-├── examples/                images, one label file each, and classes.txt: the training set
+├── examples/images/         the training set's images
+├── examples/labels/         one label file per image
+├── examples/classes.txt     the class names the label indices refer to
 ├── runs/active/             the training run's output, including weights/best.pt
 ├── runs/active.json, .log   what the current run is, and what it printed
 ├── dataset/                 rebuilt from the training set on every run
@@ -148,13 +177,17 @@ examples and the checkpoint across once:
 
 ```powershell
 $data = "C:\path\to\LB-anythings\data"
-New-Item -ItemType Directory -Force "$data\examples" | Out-Null
-Copy-Item -Recurse "<old repo>\ls_data\images" "$data\examples\images"
-Copy-Item -Recurse "<old repo>\ls_data\labels" "$data\examples\labels"
+New-Item -ItemType Directory -Force "$data\examples\images", "$data\examples\labels" | Out-Null
+Copy-Item -Recurse -Force "<old repo>\ls_data\images\*" "$data\examples\images"
+Copy-Item -Recurse -Force "<old repo>\ls_data\labels\*" "$data\examples\labels"
 Set-Content "$data\examples\classes.txt" "pipe"    # one label per line, in class-index order
 New-Item -ItemType Directory -Force "$data\runs\active\weights" | Out-Null
-Copy-Item "<old repo>\runs\pipe_ls\weights\best.pt" "$data\runs\active\weights\best.pt"
+Copy-Item -Force "<old repo>\runs\pipe_ls\weights\best.pt" "$data\runs\active\weights\best.pt"
 ```
+
+The examples you bring across count. The threshold fires when the training set *size* is a
+multiple of `LB_RETRAIN_EVERY`, rather than 25 after the last run, so migrating 333 examples
+puts the next automatic run at 350, not at 358.
 
 The old layout is read as-is: the same `task<id>` file names and the same normalized lines.
 The only new file is `classes.txt`, which names the classes the label indices refer to.
@@ -176,9 +209,11 @@ The environment variables were renamed:
 | `PIPE_MINE_VIDEO`, `_STRIDE`, `_TOPN`, `_GAP`, `_OUT` | `LB_MINE_VIDEO`, `_STRIDE`, `_TOPN`, `_GAP`, `_OUT` |
 | `PIPE_BACKEND` | gone: the colour detector is not ported |
 
-Two behaviours changed on purpose. A shell variable now beats `.env`, which is the convention
-everywhere else. And `/is_training` tells the truth, so a second training run cannot start on
-top of one already going.
+Four behaviours changed on purpose. A shell variable now beats `.env`, which is the convention
+everywhere else. `/is_training` tells the truth, so neither the retrain threshold nor Start
+Training can begin a run on top of one already going. One unreadable image no longer fails the
+whole predict batch: that task gets an empty prediction and the rest are served. And cancelled
+annotations are no longer stored as examples, so a skip cannot teach the detector anything.
 
 ## Adding a detector
 
@@ -194,8 +229,9 @@ class Detector(Protocol):
 
 Implement it, and a `DetectorFactory` that loads one from a checkpoint, both under
 `src/lb_anythings/adapters/outbound/<yours>/`. Then name it in `production_ports` in
-`src/lb_anythings/bootstrap/container.py`. Nothing else changes: predictions, collection and
-the retrain loop are all written against the port. The same is true of the example store, the
+`src/lb_anythings/bootstrap/container.py`, and in `mine_with_yolo` in the same file, which
+builds its own factory for the CLI. Nothing else changes: predictions, collection and the
+retrain loop are all written against the port. The same is true of the example store, the
 trainer, the media resolver and the frame source.
 
 ## Working on it
@@ -217,7 +253,9 @@ The vocabulary is in [CONTEXT.md](CONTEXT.md), the decisions worth keeping in
 [docs/adr/](docs/adr/), and the whole design in
 [docs/specs/0001-hexagonal-label-studio-backend.md](docs/specs/0001-hexagonal-label-studio-backend.md).
 
-The real detector's test runs only when you point it at a checkpoint and a frame:
+The real detector's test runs only when you point it at a checkpoint and a frame, and only
+with the ML stack installed: after a `--no-default-groups` sync it skips. Run a plain `uv sync`
+first:
 
 ```powershell
 $env:LB_TEST_CHECKPOINT = "C:\path\to\best.pt"

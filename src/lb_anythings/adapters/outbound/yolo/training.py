@@ -111,10 +111,13 @@ def build_training_layout(
 def training_arguments(
     layout: TrainingLayout, runs_root: Path, config: TrainingConfig
 ) -> dict[str, object]:
-    """What ultralytics is asked to do.
+    """What ultralytics is asked to do. The only place these arguments are named.
 
-    `project` is resolved: ultralytics reads a relative one against its own runs directory,
-    which would put the Checkpoint somewhere the Detector never looks.
+    Both paths are resolved here, for the same reason and against different directories of
+    ultralytics' own: a relative `project` is read against its runs directory, which would put
+    the Checkpoint somewhere the Detector never looks, and a relative `data` against its
+    datasets directory. `exist_ok` keeps the run name given: without it ultralytics invents
+    `<name>2` and the Detector, which looks under `<name>`, would never see the Checkpoint.
     """
     arguments: dict[str, object] = {
         "data": str(layout.description.resolve()),
@@ -143,8 +146,10 @@ def run_training(
     config: TrainingConfig,
 ) -> TrainingReport:
     layout = build_training_layout(examples, class_names, layout_root, minimum=config.min_examples)
+    arguments = training_arguments(layout, runs_root, config)
 
     from ultralytics import YOLO  # deferred: importing torch takes seconds and a GPU context
 
-    YOLO(config.base_model).train(**training_arguments(layout, runs_root, config))
-    return TrainingReport(layout, checkpoint_path(runs_root.resolve(), config.run_name))
+    YOLO(config.base_model).train(**arguments)
+    # Read back the resolved `project` rather than resolving again: one rule, one place.
+    return TrainingReport(layout, checkpoint_path(Path(str(arguments["project"])), config.run_name))
