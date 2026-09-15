@@ -156,6 +156,17 @@ only the backend knows at the moment it launched the run:
 | `serving_version` | the checkpoint this run was trying to beat |
 | `exported_tasks`, `unannotated_tasks`, `uncollected_tasks` | Start Training only: what the project export held |
 
+With `LB_TRACKING_SYSTEM_METRICS` on, a run also carries CPU, memory and GPU utilisation
+sampled while it trained — MLflow leaves that off by default, and training is the one thing
+here that loads the card.
+
+Two tabs in MLflow's run view stay empty, and should: **Model metrics** lists metrics attached
+to a *logged model*, and nothing here calls `mlflow.log_model` — the checkpoint is archived as
+an artifact instead, which is what you want to roll back to. **Traces** is for instrumenting
+LLM calls and has nothing to do with training. The numbers you want are the run's own metrics:
+open a run and look at **Overview → Metrics**, or use the experiment's **Chart** view to
+compare runs.
+
 `training_set_size` is the one to plot against. Detector quality on its own says little; mAP
 against how much you have labelled is what tells you whether labelling is still paying off, or
 whether the curve has flattened and your time is better spent elsewhere. Both halves land on
@@ -204,6 +215,7 @@ Paths are logged resolved, so that line says where the backend will really write
 | `LB_TRACKING` | `true` | record training runs to MLflow |
 | `LB_TRACKING_URI` | SQLite in `<data dir>/mlflow` | MLflow tracking URI; a server URL also works |
 | `LB_TRACKING_EXPERIMENT` | `lb-anythings` | the MLflow experiment to record under |
+| `LB_TRACKING_SYSTEM_METRICS` | `true` | also sample CPU, memory and GPU during a run |
 | `LB_MINE_VIDEO` | unset | video to mine |
 | `LB_MINE_STRIDE` | `15` | score every Nth frame |
 | `LB_MINE_TOPN` | `40` | how many frames to keep |

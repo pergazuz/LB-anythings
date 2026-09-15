@@ -147,6 +147,7 @@ def tracking_for(settings: Settings, started_at: datetime | None = None) -> Trac
         artifact_dir=root / "artifacts",
         experiment=settings.tracking_experiment,
         run_name=f"{settings.train_run_name}-{stamp}",
+        system_metrics=settings.tracking_system_metrics,
     )
 
 

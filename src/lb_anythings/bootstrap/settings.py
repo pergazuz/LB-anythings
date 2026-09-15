@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     tracking: bool = True  # honoured only when the tracking dependency group is installed
     tracking_uri: str | None = None  # an MLflow URI; default: SQLite under <data dir>/mlflow
     tracking_experiment: str = "lb-anythings"
+    tracking_system_metrics: bool = True  # CPU, memory and GPU while a Training Run works
 
     # Mining Hard Frames
     mine_video: Path | None = None

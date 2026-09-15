@@ -25,6 +25,7 @@ class TrackingConfig:
     artifact_dir: Path  # where a run's Checkpoints are archived
     experiment: str
     run_name: str
+    system_metrics: bool = True  # sample CPU, memory and GPU while the run works
 
 
 def tracking_environment(tracking: TrackingConfig, continues: str | None = None) -> dict[str, str]:
@@ -38,6 +39,9 @@ def tracking_environment(tracking: TrackingConfig, continues: str | None = None)
         "MLFLOW_EXPERIMENT_NAME": tracking.experiment,
         "MLFLOW_RUN": tracking.run_name,
         "MLFLOW_DISABLE_AGENT_HINT": "1",  # keeps a notice for coding agents out of the run log
+        # Off by default in MLflow. Training is the one thing here that saturates a GPU, so
+        # what it did to the card is worth a row next to what it did to the mAP.
+        "MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING": str(tracking.system_metrics).lower(),
     }
     if continues is not None:
         environment["MLFLOW_RUN_ID"] = continues

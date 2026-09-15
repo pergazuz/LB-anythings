@@ -1,5 +1,6 @@
 """Contract of the MLflow tracker, against a real SQLite store when MLflow is installed."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -148,3 +149,16 @@ def test_preparing_a_store_that_cannot_be_opened_does_not_stop_the_service(
     MlflowExperimentTracker(lambda: unusable).prepare()  # must not raise
 
     NullExperimentTracker().prepare()
+
+
+def test_the_run_is_told_to_sample_the_machine_it_trains_on(tmp_path: Path) -> None:
+    """MLflow leaves system metrics off; training is the one thing here that loads a GPU."""
+    environment = tracking_environment(config(tmp_path))
+
+    assert environment["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] == "true"
+
+
+def test_sampling_the_machine_can_be_turned_off(tmp_path: Path) -> None:
+    quiet = replace(config(tmp_path), system_metrics=False)
+
+    assert tracking_environment(quiet)["MLFLOW_ENABLE_SYSTEM_METRICS_LOGGING"] == "false"
