@@ -82,6 +82,9 @@ def launch_parameters(facts: LaunchFacts) -> dict[str, str]:
 class NullExperimentTracker:
     """Records nothing. What the service uses when tracking is off."""
 
+    def prepare(self) -> None:
+        return None
+
     def record_launch(self, facts: LaunchFacts) -> str | None:
         return None
 
@@ -95,6 +98,22 @@ class MlflowExperimentTracker:
 
     def __init__(self, configure: Callable[[], TrackingConfig | None]) -> None:
         self._configure = configure
+
+    def prepare(self) -> None:
+        """Import MLflow and open the store now.
+
+        The first recording costs seconds -- the import, and creating the store's schema --
+        and it would otherwise be paid while holding the lock that serialises the retrain
+        decision, delaying the Training Run it is recording. The Checkpoint is loaded eagerly
+        at startup for the same reason.
+        """
+        tracking = self._configure()
+        if tracking is None:
+            return
+        try:
+            ensure_experiment(tracking)
+        except Exception:  # noqa: BLE001 - tracking must never stop the service starting
+            logger.warning("could not open the tracking store", exc_info=True)
 
     def record_launch(self, facts: LaunchFacts) -> str | None:
         tracking = self._configure()

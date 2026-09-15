@@ -149,7 +149,11 @@ class FakeExperimentTracker:
 
     def __init__(self, run_id: str | None = "recorded-run") -> None:
         self.launches: list[LaunchFacts] = []
+        self.prepared = 0
         self._run_id = run_id
+
+    def prepare(self) -> None:
+        self.prepared += 1
 
     def record_launch(self, facts: LaunchFacts) -> str | None:
         self.launches.append(facts)

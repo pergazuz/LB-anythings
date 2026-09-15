@@ -200,6 +200,22 @@ def mine_with_yolo(
     return write_frames(picks, settings.hard_frames_dir)
 
 
+def ready_before_serving(
+    detector_cache: DetectorCache, tracker: ExperimentTracker
+) -> Callable[[], None]:
+    """Pay the slow costs at startup: the Checkpoint load, and opening the tracking store.
+
+    Left until first use, the one lands on the first Prediction and the other on the lock that
+    serialises the retrain decision, where it would delay the Training Run it is recording.
+    """
+
+    def ready() -> None:
+        detector_cache.current()
+        tracker.prepare()
+
+    return ready
+
+
 def build_app(settings: Settings, ports: Ports | None = None) -> FastAPI:
     ports = ports or production_ports(settings)
     context_holder = ProjectContextHolder()
@@ -231,6 +247,5 @@ def build_app(settings: Settings, ports: Ports | None = None) -> FastAPI:
             minimum_examples=settings.min_examples,
             configured_credentials=configured_credentials(settings),
         ),
-        # Load (or note the absence of) the Checkpoint at startup, not on the first request.
-        on_startup=lambda: detector_cache.current(),
+        on_startup=ready_before_serving(detector_cache, ports.tracker),
     )

@@ -88,6 +88,14 @@ class LaunchFacts:
 class ExperimentTracker(Protocol):
     """Records Training Runs. The no-op default keeps the service running untracked."""
 
+    def prepare(self) -> None:
+        """Do whatever the first recording would otherwise pay for, before anything waits.
+
+        Recording a launch happens between deciding to train and launching, under the lock
+        that keeps two Annotations from starting two runs, so it must be quick by then.
+        """
+        ...
+
     def record_launch(self, facts: LaunchFacts) -> str | None:
         """Record what the launcher knows; return the id the Training Run continues under."""
         ...

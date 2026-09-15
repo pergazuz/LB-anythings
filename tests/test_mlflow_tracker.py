@@ -126,3 +126,25 @@ def test_the_archive_is_where_the_data_directory_says(tmp_path: Path) -> None:
     mlflow.set_tracking_uri(tracking.uri)
     experiment = mlflow.get_experiment_by_name("lb-anythings")
     assert experiment.artifact_location == (tmp_path / "artifacts").as_uri()
+
+
+def test_the_store_is_opened_before_anything_waits_on_it(tmp_path: Path) -> None:
+    """The first recording costs seconds; paying it here keeps it off the retrain lock."""
+    pytest.importorskip("mlflow", reason="tracking is an optional dependency group")
+    tracking = config(tmp_path)
+    tracker = MlflowExperimentTracker(lambda: tracking)
+
+    tracker.prepare()
+
+    assert (tmp_path / "mlflow.db").exists()
+    assert (tmp_path / "artifacts").is_dir()
+
+
+def test_preparing_a_store_that_cannot_be_opened_does_not_stop_the_service(
+    tmp_path: Path,
+) -> None:
+    unusable = TrackingConfig("no-such-store://nowhere", tmp_path / "a", "lb-anythings", "active")
+
+    MlflowExperimentTracker(lambda: unusable).prepare()  # must not raise
+
+    NullExperimentTracker().prepare()

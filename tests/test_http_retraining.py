@@ -109,3 +109,7 @@ def test_a_launch_that_cannot_be_recorded_still_trains(labelling: TestClient, fa
 
     assert len(fakes.trainer.runs) == 1
     assert fakes.trainer.tracked_as == [None]
+
+
+def test_the_tracking_store_is_opened_at_startup(labelling: TestClient, fakes: Fakes) -> None:
+    assert fakes.tracker.prepared == 1
