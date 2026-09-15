@@ -247,6 +247,10 @@ bounding-box project by pointing it at a different Checkpoint and data directory
   reinstall torch from the default index.
 - One console entry point, `lb-anythings`, with three subcommands: `serve`, `train`,
   `mine`. `train` is both the Operator's shell command and what the server spawns.
+  Because it *is* the Training Run's body, it does not take the active-run guard of
+  story 27: the caller that launches it holds that. Running it by hand while the
+  server has a run active is the one way left to double-book the GPU, so the README
+  says to check `/is_training` first.
 
 ### Architecture and the dependency rule
 
