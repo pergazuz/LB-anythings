@@ -102,6 +102,29 @@ A created project gets a labeling config built from your training set's `classes
 `--label`. Each service's output is echoed with a `[name]` prefix and written to
 `data\logs\<name>.log`; `--quiet` turns the echo off and leaves the log files alone.
 
+Why this is three child processes rather than a compose file -- mostly your GPU -- is in
+[ADR 0005](docs/adr/0005-the-stack-is-child-processes-not-containers.md).
+
+### When it does not come up
+
+A service that dies on the way up takes the rest of the stack down with it rather than leaving
+half of one running, and `up` names the one that failed. Everything it printed is in
+`data\logs\<name>.log`.
+
+- **`ImportError: cannot import name 'find_loader' from 'pkgutil'`** — Label Studio 1.23 on
+  Python 3.14. `uv tool install --python 3.13 --force label-studio`.
+- **`Label Studio is not installed here`** — nothing called `label-studio` on PATH. Install it
+  as above, or set `LB_LABEL_STUDIO_COMMAND`, or run `up --no-label-studio` beside one you
+  start yourself. A shell opened before the install still has the old PATH.
+- **`label-studio stopped before it answered`** with a bind error — something else already has
+  8080 without answering `/health`. Anything that *does* answer is adopted instead.
+- **`did not answer at ... in time`** — a first Label Studio start runs its migrations and can
+  outlast the 180s deadline on a cold machine: raise `LB_STACK_TIMEOUT`.
+- **`Label Studio rejected the token (401)`** — `LABEL_STUDIO_API_KEY` is stale. Account &
+  Settings → Access Token, and paste the new one into `.env`.
+- **A project called `LB-anythings` appeared** that you did not want — the title did not match
+  yours, so `up` created one. Set `LB_PROJECT_TITLE`, and delete the empty one.
+
 ### Or run just the backend
 
 ```powershell
@@ -128,7 +151,9 @@ Label Studio it cannot start. In the project, **Settings → Model → Connect M
   `http://host.docker.internal:9090` instead: `localhost` inside the container is the
   container.
 - **Authentication:** No Authentication
-- **Interactive preannotations:** on, if you want predictions while labelling.
+- **Interactive preannotations:** on, if you want predictions while labelling. With it off
+  every other part of the loop can be right and no box will ever appear on a task, so `up`
+  says so when it finds a model connected that way. It does not change it: that is your call.
 - **Start model training on annotation submission:** on. This is the toggle that makes Label
   Studio send the annotation events. With it off nothing is collected and nothing ever
   retrains, however many tasks you label.
